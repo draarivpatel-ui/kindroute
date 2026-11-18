@@ -1,0 +1,29 @@
+{
+  "name": "kindroute",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mutual-aid volunteer matching and capacitated neighborhood routing engine",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./hungarian": "./src/hungarian.js",
+    "./routing": "./src/routing.js",
+    "./scenarios": "./src/scenarios.js",
+    "./crypto-card": "./src/crypto-card.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [
+    "mutual-aid",
+    "routing",
+    "hungarian-algorithm",
+    "clarke-wright",
+    "two-opt"
+  ],
+  "license": "MIT"
+}
