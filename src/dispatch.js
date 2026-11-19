@@ -33,7 +33,6 @@ function modeConfig(volunteer) {
  */
 export function buildCostMatrix(volunteers, requests, options = {}) {
   const slots = expandSlots(volunteers);
-  const strictSkills = options.strictSkills ?? true;
   const matrix = [];
   for (const slot of slots) {
     const volunteer = slot.volunteer;
