@@ -7,7 +7,7 @@
  * innerHTML. Only the project's own QR SVG renderer produces markup, and its
  * output is derived from numeric module paths with escaped color constants.
  */
-import { runDispatch, SCENARIOS, cloneScenario, injectSurge, hungarian, encryptCard, decryptCard, parseShareFragment, renderQrSvg, twoOpt } from './index.js';
+import { runDispatch, SCENARIOS, cloneScenario, injectSurge, encryptCard, decryptCard, parseShareFragment, renderQrSvg, twoOpt } from './index.js';
 import { createMapViz } from './map-viz.js';
 
 /**
@@ -88,7 +88,7 @@ function solve({ announce = false, resetScenario = false } = {}) {
   state.dispatch = runDispatch(state.scenario);
   state.solveMs = Math.round((performance.now() - start) * 100) / 100;
   const matching = state.dispatch.matched;
-  state.hungSteps = matching.steps ?? hungarian(matching.matrix, { rowLabels: matching.slots.map((s) => `${s.volunteerId}#${s.slotIndex}`), colLabels: state.scenario.requests.map((r) => r.id) }).steps;
+  state.hungSteps = matching.steps;
   state.hungIndex = 0;
   state.swaps = state.dispatch.optimized.swapTrace ?? [];
   state.swapIsDemo = state.swaps.length === 0;
