@@ -10,7 +10,8 @@
     "./hungarian": "./src/hungarian.js",
     "./routing": "./src/routing.js",
     "./scenarios": "./src/scenarios.js",
-    "./crypto-card": "./src/crypto-card.js"
+    "./crypto-card": "./src/crypto-card.js",
+    "./qr-svg": "./src/qr-svg.js"
   },
   "engines": {
     "node": ">=20"
