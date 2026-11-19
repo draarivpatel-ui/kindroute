@@ -1,0 +1,13 @@
+KindRoute is an offline civic dispatch instrument. Every neighborhood shown is a synthetic model, not a real pilot. No addresses, no accounts, no network calls.
+
+Four volunteers, eight requests, one grid where each unit is fifty meters. Dashed lines show a naive first come, first served baseline ignoring distance and skill.
+
+Now the optimized plan. An exact Hungarian solver matches requests, Clarke Wright savings bundle stops, and two opt swaps polish loops. The headline: forty nine percent less distance and a faster median response. Click a pin to inspect ETA and skill match. Click a volunteer for the stop by stop route.
+
+Turn on the surge. Five urgent check ins arrive at once. The engine resolves in under fifteen milliseconds and savings climb to forty one percent. Add a request or raise capacity and the plan redraws.
+
+Open Under the Hood. The Hungarian trace shows six phases: row reduction, column reduction, starring zeros, covering columns, the augmenting path, the final assignment. Step through the heatmap as provisional matches become final. Then step through the two opt trace, where each reversal shaves an exact distance.
+
+Finally, dispatch. Clicking a volunteer seals an AES two fifty six GCM card with a fresh key and IV. The QR code carries the encrypted link, so no server stores the route. Preview the card and it decrypts locally into a mobile checklist. The link is the secret; share it through a trusted channel.
+
+KindRoute proves exact matching, honest baselines and private dispatch can run in a browser. All results are synthetic benchmarks, not field claims.
