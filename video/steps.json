@@ -1,49 +1,254 @@
 [
-  { "do": "at", "s": 0.5 },
-  { "do": "move", "selector": "#map-title", "ms": 700 },
-  { "do": "at", "s": 8.0 },
-  { "do": "click", "selector": "#baseline-toggle" },
-  { "do": "wait", "ms": 1400 },
-  { "do": "at", "s": 15.0 },
-  { "do": "click", "selector": "#baseline-toggle" },
-  { "do": "move", "selector": "#savings-pct", "ms": 800 },
-  { "do": "at", "s": 24.0 },
-  { "do": "click", "selector": "#scenario-tutoring" },
-  { "do": "wait", "ms": 1200 },
-  { "do": "click", "selector": "#scenario-oakwood" },
-  { "do": "at", "s": 33.0 },
-  { "do": "click", "selector": "#tab-algo" },
-  { "do": "wait", "ms": 900 },
-  { "do": "scrollTo", "selector": "#hung-matrix", "ms": 1000 },
-  { "do": "at", "s": 42.0 },
-  { "do": "click", "selector": "#hung-next" },
-  { "do": "wait", "ms": 700 },
-  { "do": "click", "selector": "#hung-next" },
-  { "do": "wait", "ms": 700 },
-  { "do": "click", "selector": "#hung-next" },
-  { "do": "at", "s": 55.0 },
-  { "do": "click", "selector": "#swap-next" },
-  { "do": "wait", "ms": 700 },
-  { "do": "click", "selector": "#swap-next" },
-  { "do": "at", "s": 64.0 },
-  { "do": "click", "selector": "#tab-map" },
-  { "do": "wait", "ms": 500 },
-  { "do": "click", "selector": "#scenario-winter" },
-  { "do": "wait", "ms": 500 },
-  { "do": "click", "selector": "#surge-toggle" },
-  { "do": "wait", "ms": 1400 },
-  { "do": "at", "s": 76.0 },
-  { "do": "click", "selector": "#capacity-plus" },
-  { "do": "wait", "ms": 1000 },
-  { "do": "at", "s": 84.0 },
-  { "do": "click", "selector": "#route-list", "ms": 0 },
-  { "do": "wait", "ms": 800 },
-  { "do": "click", "selector": "#tab-card" },
-  { "do": "at", "s": 94.0 },
-  { "do": "click", "selector": "#volunteer-view" },
-  { "do": "wait", "ms": 2200 },
-  { "do": "at", "s": 103.0 },
-  { "do": "click", "selector": "#exit-volunteer-view" },
-  { "do": "wait", "ms": 800 },
-  { "do": "at", "s": 108.0 }
+  {
+    "do": "at",
+    "s": 0.5
+  },
+  {
+    "do": "move",
+    "selector": "#map-title",
+    "ms": 700
+  },
+  {
+    "do": "at",
+    "s": 0.536
+  },
+  {
+    "do": "at",
+    "s": 10.905
+  },
+  {
+    "do": "click",
+    "selector": "#baseline-toggle"
+  },
+  {
+    "do": "wait",
+    "ms": 800
+  },
+  {
+    "do": "at",
+    "s": 16.08
+  },
+  {
+    "do": "wait",
+    "ms": 800
+  },
+  {
+    "do": "at",
+    "s": 22.421000000000003
+  },
+  {
+    "do": "click",
+    "selector": "#baseline-toggle"
+  },
+  {
+    "do": "move",
+    "selector": "#savings-pct",
+    "ms": 600
+  },
+  {
+    "do": "at",
+    "s": 24.611
+  },
+  {
+    "do": "at",
+    "s": 31.913999999999998
+  },
+  {
+    "do": "at",
+    "s": 36.968
+  },
+  {
+    "do": "at",
+    "s": 39.843
+  },
+  {
+    "do": "click",
+    "selector": "#route-list"
+  },
+  {
+    "do": "eval",
+    "js": "document.querySelector('#route-list .route-item')?.click()"
+  },
+  {
+    "do": "eval",
+    "js": "(() => { const b = document.querySelector('#route-list .route-item'); if (b) b.click(); })()"
+  },
+  {
+    "do": "wait",
+    "ms": 500
+  },
+  {
+    "do": "at",
+    "s": 43.262
+  },
+  {
+    "do": "at",
+    "s": 45.173
+  },
+  {
+    "do": "click",
+    "selector": "#scenario-winter"
+  },
+  {
+    "do": "wait",
+    "ms": 500
+  },
+  {
+    "do": "click",
+    "selector": "#surge-toggle"
+  },
+  {
+    "do": "wait",
+    "ms": 800
+  },
+  {
+    "do": "at",
+    "s": 47.727000000000004
+  },
+  {
+    "do": "at",
+    "s": 53.673
+  },
+  {
+    "do": "click",
+    "selector": "#add-request"
+  },
+  {
+    "do": "wait",
+    "ms": 500
+  },
+  {
+    "do": "click",
+    "selector": "#capacity-plus"
+  },
+  {
+    "do": "wait",
+    "ms": 500
+  },
+  {
+    "do": "at",
+    "s": 57.629000000000005
+  },
+  {
+    "do": "click",
+    "selector": "#tab-algo"
+  },
+  {
+    "do": "wait",
+    "ms": 400
+  },
+  {
+    "do": "scrollTo",
+    "selector": "#hung-matrix",
+    "ms": 700
+  },
+  {
+    "do": "at",
+    "s": 59.611000000000004
+  },
+  {
+    "do": "click",
+    "selector": "#hung-next"
+  },
+  {
+    "do": "wait",
+    "ms": 450
+  },
+  {
+    "do": "click",
+    "selector": "#hung-next"
+  },
+  {
+    "do": "wait",
+    "ms": 450
+  },
+  {
+    "do": "click",
+    "selector": "#hung-next"
+  },
+  {
+    "do": "wait",
+    "ms": 450
+  },
+  {
+    "do": "click",
+    "selector": "#hung-next"
+  },
+  {
+    "do": "wait",
+    "ms": 450
+  },
+  {
+    "do": "click",
+    "selector": "#hung-next"
+  },
+  {
+    "do": "at",
+    "s": 69.2
+  },
+  {
+    "do": "click",
+    "selector": "#hung-next"
+  },
+  {
+    "do": "scrollTo",
+    "selector": "#swap-visual",
+    "ms": 700
+  },
+  {
+    "do": "at",
+    "s": 73.396
+  },
+  {
+    "do": "click",
+    "selector": "#swap-next"
+  },
+  {
+    "do": "at",
+    "s": 79.173
+  },
+  {
+    "do": "click",
+    "selector": "#tab-card"
+  },
+  {
+    "do": "wait",
+    "ms": 400
+  },
+  {
+    "do": "at",
+    "s": 81.12
+  },
+  {
+    "do": "at",
+    "s": 86.316
+  },
+  {
+    "do": "at",
+    "s": 90.905
+  },
+  {
+    "do": "click",
+    "selector": "#volunteer-view"
+  },
+  {
+    "do": "wait",
+    "ms": 1200
+  },
+  {
+    "do": "at",
+    "s": 95.28
+  },
+  {
+    "do": "at",
+    "s": 99.557
+  },
+  {
+    "do": "wait",
+    "ms": 500
+  },
+  {
+    "do": "at",
+    "s": 109.575
+  }
 ]
