@@ -32,16 +32,16 @@ const REQUIRED_IDS = [
   'main-content', 'tab-map', 'tab-algo', 'tab-card',
   'panel-map', 'panel-algo', 'panel-card',
   'scenario-list', 'scenario-oakwood', 'scenario-tutoring', 'scenario-winter',
-  'surge-toggle', 'request-desc', 'request-urgency', 'request-load', 'add-request',
+  'surge-toggle', 'surge-note', 'request-desc', 'request-urgency', 'request-load', 'add-request',
   'capacity-volunteer', 'capacity-minus', 'capacity-plus', 'capacity-value',
-  'solve-time', 'map-title', 'map-subtitle', 'map-canvas', 'map-wrap', 'map-inspect',
-  'map-status', 'baseline-toggle', 'reset-view',
+  'solve-time', 'map-title', 'map-canvas', 'map-wrap', 'map-inspect',
+  'map-status', 'baseline-toggle', 'reset-view', 'zoom-in', 'zoom-out',
   'savings-pct', 'km-saved', 'metric-distance', 'metric-latency', 'metric-gini',
-  'metric-compute', 'metric-unfulfilled', 'route-list', 'route-count',
+  'metric-late', 'metric-compute', 'metric-unfulfilled', 'route-list', 'route-count',
   'hung-prev', 'hung-next', 'hung-counter', 'hung-title', 'hung-detail', 'hung-matrix',
   'swap-prev', 'swap-next', 'swap-counter', 'swap-title', 'swap-detail', 'swap-visual', 'swap-rows',
   'dispatch-empty', 'dispatch-body', 'qr-frame', 'card-name', 'card-summary',
-  'card-stops', 'card-link', 'copy-link', 'print-sheet', 'volunteer-view', 'go-map',
+  'card-stops', 'card-link', 'copy-link', 'tamper-test', 'tamper-result', 'print-sheet', 'volunteer-view', 'go-map',
   'volunteer-view-panel', 'vv-name', 'vv-summary', 'vv-stops', 'exit-volunteer-view',
   'print-sheet-doc', 'toast', 'offline-chip', 'offline-label',
 ];
@@ -67,12 +67,18 @@ test('all three preset savings and the surge figure appear as live engine number
   for (const [id, saved] of Object.entries(expected)) {
     assert.equal(runDispatch(SCENARIOS[id]).metrics.totalDistance.savedPercent, saved, id);
   }
-  const surge = runDispatch(injectSurge(SCENARIOS.winter, 4242, 5));
-  assert.equal(surge.metrics.totalDistance.savedPercent, 40.978);
+  // The surge note must show the exact figure the toggle produces for the
+  // active preset, not a hardcoded winter-only number. Oakwood surges to 52.228.
+  const oakwoodSurge = runDispatch(injectSurge(SCENARIOS.oakwood, 4242, 5));
+  assert.equal(oakwoodSurge.metrics.totalDistance.savedPercent, 52.228);
+  assert.match(HTML, /52\.23% saved/);
+  const winterSurge = runDispatch(injectSurge(SCENARIOS.winter, 4242, 5));
+  assert.equal(winterSurge.metrics.totalDistance.savedPercent, 40.978);
+  assert.match(APP, /updateSurgeNote/);
+  assert.match(APP, /surgeProjection/);
   // Rounded figures shown in the scenario rail.
   assert.match(HTML, /49\.35% saved/);
   assert.match(HTML, /21\.34% saved/);
-  assert.match(HTML, /40\.98%/);
 });
 
 test('live re-solve stays under 15 ms for every preset and the surge variant', () => {

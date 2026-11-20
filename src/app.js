@@ -80,6 +80,11 @@ function activeScenario() {
   return state.surge ? injectSurge(base, 4242, 5) : base;
 }
 
+/** Deterministic surge projection for the active preset (what the toggle yields). */
+function surgeProjection() {
+  return runDispatch(injectSurge(cloneScenario(SCENARIOS[state.scenarioId]), 4242, 5));
+}
+
 function solve({ announce = false, resetScenario = false } = {}) {
   if (resetScenario || !state.scenario) {
     state.scenario = activeScenario();
@@ -95,6 +100,7 @@ function solve({ announce = false, resetScenario = false } = {}) {
   if (state.swapIsDemo) state.swaps = buildDemoSwaps();
   state.swapIndex = 0;
   updateScenarioButtons();
+  updateSurgeNote();
   updateMap();
   updateMetrics();
   updateRoutes();
@@ -111,6 +117,13 @@ function updateScenarioButtons() {
   }
 }
 
+/** The surge sub-label always shows the exact figure the toggle produces here. */
+function updateSurgeNote() {
+  const projection = surgeProjection();
+  const saved = projection.metrics.totalDistance.savedPercent;
+  setText('surge-note', `5 urgent check-ins, seed 4242, ${saved.toFixed(2)}% saved here`);
+}
+
 // ---------------------------------------------------------------------------
 // Map + metrics + routes
 // ---------------------------------------------------------------------------
@@ -118,7 +131,7 @@ function updateMap() {
   setText('map-title', state.scenario.name);
   const n = state.scenario.requests.length;
   const v = state.scenario.volunteers.length;
-  setText('map-subtitle', `Synthetic neighborhood model: ${n} requests, ${v} volunteers. Click a pin or depot to inspect.`);
+  setText('map-status', `${state.scenario.name}: ${n} requests, ${v} volunteers. Click a pin or depot to inspect; drag to pan, scroll to zoom.`);
   mapViz?.setState({ scenario: state.scenario, dispatch: state.dispatch });
 }
 
@@ -149,11 +162,12 @@ function updateMetrics() {
   setText('metric-distance', `${kmOpt.toFixed(2)} / ${kmBase.toFixed(2)} km`);
   setText('metric-latency', `${metrics.medianResponseLatencyMinutes.optimized} / ${metrics.medianResponseLatencyMinutes.baseline} min`);
   setText('metric-gini', `${metrics.gini.optimized} / ${metrics.gini.baseline}`);
+  setText('metric-late', `${metrics.lateArrivals.optimized} / ${metrics.lateArrivals.baseline}`);
   setText('metric-compute', `${state.solveMs} ms`);
   setText('metric-unfulfilled', `${metrics.unfulfilledRequests.optimized} / ${metrics.unfulfilledRequests.baseline}`);
   setText('solve-time', `${state.solveMs} ms`);
   setText('map-status', state.dispatch.optimized.routes.length
-    ? `${state.dispatch.optimized.routes.length} optimized routes, ${state.dispatch.optimized.swapTrace.length} accepted 2-opt swaps.`
+    ? `${state.dispatch.optimized.routes.length} optimized routes, ${state.dispatch.optimized.swapTrace.length} accepted 2-opt swaps. Drag to pan, scroll to zoom.`
     : 'No feasible routes in this synthetic model.');
 }
 
@@ -210,6 +224,18 @@ function updateStepper() {
   updateSwaps();
 }
 
+/** Readable trace labels: volunteer display names and numbered requests. */
+function traceLabels() {
+  const slotLabel = (slot) => {
+    const volunteer = state.scenario.volunteers.find((v) => v.id === slot.volunteerId);
+    return `${volunteer?.name ?? slot.volunteerId}#${slot.slotIndex + 1}`;
+  };
+  return {
+    rows: state.dispatch.matched.slots.map(slotLabel),
+    cols: state.scenario.requests.map((r, i) => `#${i + 1}`),
+  };
+}
+
 function updateHungarian() {
   const steps = state.hungSteps;
   const total = steps.length;
@@ -224,11 +250,12 @@ function updateHungarian() {
   setText('hung-title', `${step.index + 1}. ${step.title ?? step.type}`);
   setText('hung-detail', step.detail ?? '');
 
+  const labels = traceLabels();
   const matrix = step.matrix ?? state.dispatch.matched.matrix;
   const rows = matrix?.length ?? 0;
   const cols = rows ? matrix[0].length : 0;
-  const rowLabels = step.rowLabels ?? state.dispatch.matched.slots.map((s) => s.volunteerId.slice(-3) + s.slotIndex);
-  const colLabels = step.colLabels ?? state.scenario.requests.map((r) => r.id.slice(-3));
+  const rowLabels = step.rowLabels ?? labels.rows;
+  const colLabels = step.colLabels ?? labels.cols;
   const tbody = $('hung-matrix').tBodies[0];
   tbody.replaceChildren();
 
@@ -259,7 +286,7 @@ function updateHungarian() {
       if (path.has(`${i}:${j}`)) cls.push('path');
       if (finalPairs.has(`${i}:${j}`)) cls.push('match');
       const cell = el('td', cls.join(' '), Number.isFinite(value) ? (value >= 1e5 ? 'INF' : Math.round(value)) : '--');
-      cell.title = `${rowLabels[i] ?? i} to ${colLabels[j] ?? j}: ${value}`;
+      cell.title = `${rowLabels[i] ?? i} to request ${colLabels[j] ?? j}: ${value}`;
       tr.append(cell);
     }
     tbody.append(tr);
@@ -310,7 +337,7 @@ function updateSwaps() {
     tr.append(el('td', null, `#${i + 1} [${item.edgeA[0]},${item.edgeA[1]}]`));
     tr.append(el('td', null, item.beforeDist.toFixed(3)));
     tr.append(el('td', null, item.afterDist.toFixed(3)));
-    tr.append(el('td', null, `${item.delta.toFixed(3)} u`));
+    tr.append(el('td', null, `${Math.abs(item.delta).toFixed(3)} u`));
     rows.append(tr);
   });
 }
@@ -356,6 +383,7 @@ async function sealCard(volunteerId, { silent = false } = {}) {
     state.sealed = sealed;
     const base = `${location.origin}${location.pathname}`;
     sealed.url = `${base}${sealed.fragment}`;
+    sealed.plaintext = card;
     renderCard(card, sealed);
     if (!silent) {
       setText('map-status', `Sealed an encrypted card for ${card.name}. Open the Volunteer card tab to share it.`);
@@ -390,6 +418,7 @@ function renderCard(card, sealed) {
   $('card-link').value = sealed.url;
   $('dispatch-empty').hidden = true;
   $('dispatch-body').hidden = false;
+  $('tamper-result').hidden = true;
   renderPrintSheet(card, sealed);
 }
 
@@ -418,6 +447,58 @@ async function copyLink() {
     $('card-link').select();
     toast('Select and copy the link manually');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Tamper detection proof: one flipped bit must fail authentication
+// ---------------------------------------------------------------------------
+function flipLastCiphertextBit(base64Url) {
+  const padded = base64Url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (base64Url.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  bytes[bytes.length - 1] ^= 0x01;
+  let out = '';
+  for (const byte of bytes) out += String.fromCharCode(byte);
+  return btoa(out).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function runTamperTest() {
+  const sealed = state.sealed;
+  const box = $('tamper-result');
+  if (!sealed) { toast('Select a volunteer first', true); return; }
+  box.hidden = false;
+  box.classList.remove('is-pass', 'is-fail');
+  box.replaceChildren();
+  const rows = el('ul', 'inspection-list');
+  let tamperedRejected = false;
+  let errorMessage = '';
+  try {
+    const intact = await decryptCard(sealed.ciphertext, sealed.key);
+    rows.append(el('li', null, `Control: the untouched link decrypts locally - ${intact.stops.length} stops read back, zero network calls.`));
+  } catch (error) {
+    rows.append(el('li', null, `Control failed unexpectedly: ${error.message}`));
+  }
+  const tampered = flipLastCiphertextBit(sealed.ciphertext);
+  try {
+    await decryptCard(tampered, sealed.key);
+  } catch (error) {
+    tamperedRejected = true;
+    errorMessage = error.message;
+  }
+  if (tamperedRejected) {
+    rows.append(el('li', null, `Tamper: flipped the last bit of the ciphertext. Authentication failed: ${errorMessage}`));
+    rows.append(el('li', null, 'GCM detected the forgery and refused to release a single byte of the route.'));
+    box.classList.add('is-pass');
+    box.append(el('strong', null, 'Tamper test passed: one flipped bit was rejected'));
+    toast('Tamper test passed: the flipped bit was rejected');
+  } else {
+    rows.append(el('li', null, 'Tamper: the flipped ciphertext decrypted. This must never happen.'));
+    box.classList.add('is-fail');
+    box.append(el('strong', null, 'Tamper test FAILED'));
+    toast('Tamper test failed - this must never happen', true);
+  }
+  box.append(rows);
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +621,9 @@ function wire() {
   $('capacity-plus').addEventListener('click', () => adjustCapacity(1));
 
   $('baseline-toggle').addEventListener('change', (event) => mapViz?.setBaseline(event.target.checked));
-  $('reset-view').addEventListener('click', () => { showInspection(null); mapViz?.setState({ scenario: state.scenario, dispatch: state.dispatch }); });
+  $('zoom-in').addEventListener('click', () => mapViz?.zoomBy(1.35));
+  $('zoom-out').addEventListener('click', () => mapViz?.zoomBy(1 / 1.35));
+  $('reset-view').addEventListener('click', () => { showInspection(null); mapViz?.resetView(); });
 
   $('hung-prev').addEventListener('click', () => { state.hungIndex = Math.max(0, state.hungIndex - 1); updateHungarian(); });
   $('hung-next').addEventListener('click', () => { state.hungIndex = Math.min(state.hungSteps.length - 1, state.hungIndex + 1); updateHungarian(); });
@@ -549,6 +632,7 @@ function wire() {
 
   $('go-map').addEventListener('click', () => showTab('map'));
   $('copy-link').addEventListener('click', copyLink);
+  $('tamper-test').addEventListener('click', runTamperTest);
   $('print-sheet').addEventListener('click', () => window.print());
   $('volunteer-view').addEventListener('click', () => {
     if (!state.sealed) { toast('Select a volunteer first', true); return; }

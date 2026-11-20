@@ -335,6 +335,36 @@ export function median(valuesInput) {
 }
 
 /**
+ * Honest deadline audit: count stops whose measured arrival time along the
+ * actual route exceeds the request's own deadline. This is the number the UI
+ * reports as "late arrivals" for each strategy.
+ *
+ * @param {object[]} routes routes with `requestIds` and `legs` (arrivalMinutes)
+ * @param {object[]} requests all scenario requests (for deadline lookup)
+ * @returns {{count:number, stops:object[]}} total late stops and their details
+ */
+export function countLateArrivals(routes, requests) {
+  const deadlines = new Map((requests ?? []).map((r) => [r.id, r.deadline]));
+  const stops = [];
+  for (const route of routes ?? []) {
+    for (const leg of route.legs ?? []) {
+      const deadline = deadlines.get(leg.requestId);
+      if (!Number.isFinite(deadline)) continue;
+      if (leg.arrivalMinutes > deadline) {
+        stops.push({
+          requestId: leg.requestId,
+          volunteerId: route.volunteerId,
+          arrivalMinutes: leg.arrivalMinutes,
+          deadline,
+          latenessMinutes: roundNumber(leg.arrivalMinutes - deadline),
+        });
+      }
+    }
+  }
+  return { count: stops.length, stops };
+}
+
+/**
  * Compare optimized routes to the naive FCFS baseline.
  *
  * @param {object} optimized result of optimizeRoutes
@@ -363,6 +393,8 @@ export function compareDispatch(optimized, baseline, context = {}) {
   // the median stable even when route counts differ between strategies.
   const optimizedLatencies = optimized.routes.flatMap((r) => (r.legs ?? []).map((l) => l.arrivalMinutes));
   const baselineLatencies = baseline.routes.flatMap((r) => (r.legs ?? []).map((l) => l.arrivalMinutes));
+  const optimizedLate = countLateArrivals(optimized.routes, context.requests ?? []);
+  const baselineLate = countLateArrivals(baseline.routes, context.requests ?? []);
 
   return {
     totalDistance: {
@@ -379,6 +411,12 @@ export function compareDispatch(optimized, baseline, context = {}) {
       optimized: roundNumber(median(optimizedLatencies)),
       baseline: roundNumber(median(baselineLatencies)),
     },
+    lateArrivals: {
+      optimized: optimizedLate.count,
+      baseline: baselineLate.count,
+      optimizedStops: optimizedLate.stops,
+      baselineStops: baselineLate.stops,
+    },
     unfulfilledRequests: {
       optimized: (context.requests ?? []).length - optimized.routes.reduce((sum, r) => sum + r.requestIds.length, 0),
       baseline: (context.requests ?? []).length - baseline.routes.reduce((sum, r) => sum + r.requestIds.length, 0),
@@ -391,4 +429,4 @@ function roundNumber(value) {
   return Math.round(value * 1000) / 1000;
 }
 
-export default { optimizeRoutes, baselineDispatch, compareDispatch, twoOpt, gini, median, TRAVEL_MODES, distance };
+export default { optimizeRoutes, baselineDispatch, compareDispatch, twoOpt, gini, median, countLateArrivals, TRAVEL_MODES, distance };

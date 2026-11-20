@@ -21,10 +21,7 @@
           <circle cx="20" cy="29" r="2.4" fill="#f59e0b"/>
         </svg>
       </span>
-      <span class="brand-text">
-        <strong>KindRoute</strong>
-        <span class="brand-tagline">Match volunteers and route mutual-aid stops fairly.</span>
-      </span>
+      <strong class="brand-title">KindRoute</strong>
     </div>
     <div class="topbar-meta">
       <span class="chip chip-synthetic" title="Every preset, request and volunteer below is a synthetic neighborhood model.">Synthetic models only</span>
@@ -47,20 +44,20 @@
           <div class="card">
             <div class="card-head">
               <h2>Neighborhood preset</h2>
-              <span class="eyebrow">Synthetic</span>
+              <span class="head-stat" id="preset-stat">3 presets</span>
             </div>
             <div class="scenario-list" id="scenario-list" role="group" aria-label="Synthetic neighborhood presets">
-              <button class="scenario is-active" id="scenario-oakwood" type="button" data-scenario="oakwood">
+              <button class="scenario is-active" id="scenario-oakwood" type="button" data-scenario="oakwood" aria-pressed="true">
                 <span class="scenario-title">Oakwood groceries</span>
                 <span class="scenario-sub">8 requests / 4 volunteers</span>
                 <span class="scenario-save">49.35% saved</span>
               </button>
-              <button class="scenario" id="scenario-tutoring" type="button" data-scenario="tutoring">
+              <button class="scenario" id="scenario-tutoring" type="button" data-scenario="tutoring" aria-pressed="false">
                 <span class="scenario-title">After-school tutoring</span>
                 <span class="scenario-sub">7 requests / 4 volunteers</span>
                 <span class="scenario-save">21.34% saved</span>
               </button>
-              <button class="scenario" id="scenario-winter" type="button" data-scenario="winter">
+              <button class="scenario" id="scenario-winter" type="button" data-scenario="winter" aria-pressed="false">
                 <span class="scenario-title">Winter freeze check-in</span>
                 <span class="scenario-sub">9 requests / 5 volunteers</span>
                 <span class="scenario-save">33.20% saved</span>
@@ -72,12 +69,12 @@
           <div class="card">
             <div class="card-head">
               <h2>Live controls</h2>
-              <span class="eyebrow" id="solve-time">-- ms</span>
+              <span class="head-stat tabular" id="solve-time">-- ms</span>
             </div>
             <label class="switch-row" for="surge-toggle">
               <span>
                 <strong>Emergency surge</strong>
-                <small>5 urgent check-ins, seed 4242, 40.98% saved</small>
+                <small id="surge-note">5 urgent check-ins, seed 4242, 52.23% saved</small>
               </span>
               <input type="checkbox" id="surge-toggle" role="switch">
               <span class="switch" aria-hidden="true"></span>
@@ -118,12 +115,13 @@
         <div class="stage">
           <div class="card map-card">
             <div class="card-head map-head">
-              <div>
-                <h2 id="map-title">Oakwood Mutual Aid Groceries</h2>
-                <p class="subtle" id="map-subtitle">Synthetic neighborhood model. Click a pin or depot to inspect.</p>
-              </div>
+              <h2 id="map-title">Oakwood Mutual Aid Groceries</h2>
               <div class="map-actions">
                 <label class="checkline"><input type="checkbox" id="baseline-toggle"> Show FCFS baseline</label>
+                <div class="zoom-cluster" role="group" aria-label="Map zoom">
+                  <button class="btn btn-quiet zoom-btn" id="zoom-out" type="button" aria-label="Zoom out">-</button>
+                  <button class="btn btn-quiet zoom-btn" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+                </div>
                 <button class="btn btn-quiet" id="reset-view" type="button">Reset view</button>
               </div>
             </div>
@@ -132,23 +130,20 @@
               <div class="map-legend" id="map-legend" aria-hidden="true">
                 <span><i class="legend-line legend-route"></i> Optimized</span>
                 <span><i class="legend-line legend-fcfs"></i> FCFS</span>
-                <span><i class="legend-dot legend-u5"></i> Urgency 5</span>
-                <span><i class="legend-dot legend-u3"></i> 3</span>
-                <span><i class="legend-dot legend-u1"></i> 1</span>
+                <span><i class="legend-dot"></i> Urgency 1 to 5, red is critical</span>
                 <span><i class="legend-square"></i> Volunteer home</span>
               </div>
               <div class="map-inspect" id="map-inspect" hidden></div>
             </div>
             <div class="map-foot">
-              <span id="map-status">Select a route or pin to inspect stop-by-stop ETAs.</span>
+              <span id="map-status">Select a route or pin to inspect stop-by-stop ETAs. Drag to pan, scroll to zoom.</span>
               <span class="tabular" id="map-scale">1 grid unit = 50 m</span>
             </div>
           </div>
 
           <div class="card baseline-card" id="baseline-card">
             <div class="card-head">
-              <h2>Baseline comparison</h2>
-              <span class="eyebrow">KindRoute vs naive FCFS</span>
+              <h2>KindRoute vs naive FCFS baseline</h2>
             </div>
             <div class="metric-grid">
               <div class="metric metric-hero">
@@ -172,9 +167,9 @@
                 <span class="metric-note">Lower is fairer</span>
               </div>
               <div class="metric">
-                <span class="metric-label">Compute time</span>
-                <strong class="metric-value tabular" id="metric-compute">-- ms</strong>
-                <span class="metric-note">Exact solve in browser</span>
+                <span class="metric-label">Late arrivals</span>
+                <strong class="metric-value tabular" id="metric-late">-- / --</strong>
+                <span class="metric-note">Optimized / FCFS stops past deadline</span>
               </div>
               <div class="metric">
                 <span class="metric-label">Unfulfilled</span>
@@ -182,6 +177,7 @@
                 <span class="metric-note">Optimized / FCFS</span>
               </div>
             </div>
+            <p class="fineprint" id="metric-compute-note">Exact solve in browser: <span class="tabular" id="metric-compute">-- ms</span></p>
           </div>
         </div>
 
@@ -189,7 +185,7 @@
           <div class="card routes-card">
             <div class="card-head">
               <h2>Volunteer routes</h2>
-              <span class="eyebrow" id="route-count">-- routes</span>
+              <span class="head-stat" id="route-count">-- routes</span>
             </div>
             <div class="route-list" id="route-list"></div>
             <p class="fineprint">Click a volunteer to seal an encrypted dispatch card.</p>
@@ -204,7 +200,7 @@
         <div class="card stepper-card">
           <div class="card-head">
             <h2>Hungarian assignment trace</h2>
-            <span class="eyebrow">Exact O(n^3), six phases</span>
+            <span class="head-stat">Exact O(n^3)</span>
           </div>
           <div class="stepper-bar">
             <button class="btn btn-quiet" id="hung-prev" type="button" aria-label="Previous Hungarian phase">Previous</button>
@@ -229,7 +225,7 @@
         <div class="card stepper-card">
           <div class="card-head">
             <h2>2-Opt route polish</h2>
-            <span class="eyebrow">Strictly improving swaps</span>
+            <span class="head-stat">Strictly improving swaps</span>
           </div>
           <div class="stepper-bar">
             <button class="btn btn-quiet" id="swap-prev" type="button" aria-label="Previous 2-opt swap">Previous</button>
@@ -266,7 +262,7 @@
         <div class="card dispatch-shell">
           <div class="card-head">
             <h2>Encrypted dispatch card</h2>
-            <span class="eyebrow">AES-256-GCM / offline</span>
+            <span class="head-stat">AES-256-GCM, offline</span>
           </div>
           <div class="dispatch-empty" id="dispatch-empty">
             <p>Choose a volunteer on the dispatch map to seal a route card.</p>
@@ -286,9 +282,11 @@
                 <button class="btn btn-primary" id="copy-link" type="button">Copy link</button>
               </div>
               <div class="button-row">
+                <button class="btn btn-accent" id="tamper-test" type="button">Run tamper test</button>
                 <button class="btn btn-quiet" id="print-sheet" type="button">Printable route sheet</button>
-                <button class="btn btn-accent" id="volunteer-view" type="button">Preview volunteer card</button>
+                <button class="btn btn-quiet" id="volunteer-view" type="button">Preview volunteer card</button>
               </div>
+              <div class="tamper-result" id="tamper-result" hidden></div>
             </div>
           </div>
         </div>
@@ -306,7 +304,6 @@
       <div class="vv-card">
         <div class="vv-head">
           <div>
-            <span class="eyebrow">Encrypted dispatch card</span>
             <h1 id="vv-name">Volunteer checklist</h1>
             <p id="vv-summary">Decrypting locally...</p>
           </div>

@@ -141,25 +141,28 @@ export function hungarian(rawMatrix, options = {}) {
     stepIndex += 1;
   };
 
-  push('row-reduction', {
-    detail: 'Subtract the smallest cost in each row. A zero now marks the cheapest request for that slot.',
-    reductions: work.map((row, i) => {
-      const min = Math.min(...row);
-      return { row: i, label: workRowLabels[i], min, reduced: row.map((v) => v - min) };
-    }),
-    matrix: cloneMatrix(work),
-  });
-
   const afterRows = work.map((row) => {
     const min = Math.min(...row);
     return row.map((v) => v - min);
   });
   const colMins = Array.from({ length: m }, (_, j) => Math.min(...afterRows.map((row) => row[j])));
   const afterCols = afterRows.map((row) => row.map((v, j) => v - colMins[j]));
+  push('row-reduction', {
+    detail: 'Subtract the smallest cost in each row. A zero now marks the cheapest request for that slot.',
+    reductions: work.map((row, i) => {
+      const min = Math.min(...row);
+      return { row: i, label: workRowLabels[i], min, reduced: row.map((v) => v - min) };
+    }),
+    matrix: afterRows,
+    rowLabels: workRowLabels.slice(),
+    colLabels: workColLabels.slice(),
+  });
   push('col-reduction', {
     detail: 'Subtract the smallest reduced cost in each column. Nonnegative costs with at least one zero per row and column remain.',
     reductions: colMins.map((min, j) => ({ col: j, label: workColLabels[j], min })),
     matrix: afterCols,
+    rowLabels: workRowLabels.slice(),
+    colLabels: workColLabels.slice(),
   });
 
   const starred = [];
@@ -181,6 +184,9 @@ export function hungarian(rawMatrix, options = {}) {
     detail: 'Star one independent zero per row. A starred zero is a provisional match.',
     cells: starred,
     coveredCols: [],
+    matrix: cloneMatrix(afterCols),
+    rowLabels: workRowLabels.slice(),
+    colLabels: workColLabels.slice(),
   });
 
   // Potentials based augmenting path solver. p[j] = row matched to column j
@@ -240,6 +246,9 @@ export function hungarian(rawMatrix, options = {}) {
       targetRow: i - 1,
       targetRowLabel: workRowLabels[i - 1],
       exploredColumns: visitedColumns.filter((j) => j > 0).map((j) => j - 1),
+      matrix: cloneMatrix(work),
+      rowLabels: workRowLabels.slice(),
+      colLabels: workColLabels.slice(),
     });
 
     const path = [];
@@ -264,6 +273,9 @@ export function hungarian(rawMatrix, options = {}) {
       targetRow: i - 1,
       targetRowLabel: workRowLabels[i - 1],
       matchedCount: i,
+      matrix: cloneMatrix(work),
+      rowLabels: workRowLabels.slice(),
+      colLabels: workColLabels.slice(),
     });
   }
 
