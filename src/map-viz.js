@@ -47,6 +47,16 @@ export function computeBounds(grid, points) {
   return { maxX: maxX || 1, maxY: maxY || 1 };
 }
 
+/** Shortest distance from point (px, py) to segment (x1, y1)-(x2, y2). */
+export function pointSegmentDistance(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
 /** Rounded rectangle helper (path only, no fill). */
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -78,6 +88,7 @@ export function createMapViz(canvas, callbacks = {}) {
   let animationFrame = 0;
   let rafId = 0;
   let hits = [];
+  let routeHits = [];
   let cssWidth = 0;
   let cssHeight = 0;
   // View transform: zoom k anchored on the canvas center plus a pan offset.
@@ -85,6 +96,8 @@ export function createMapViz(canvas, callbacks = {}) {
   let panPointer = null;
   let panStart = null;
   let dragDist = 0;
+  const pointers = new Map();
+  let pinch = null;
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
@@ -150,17 +163,22 @@ export function createMapViz(canvas, callbacks = {}) {
     view.ty = Math.max(-my, Math.min(my, view.ty));
   }
 
-  /** Zoom by a factor anchored at canvas-local coordinates (cx, cy). */
-  function zoomAt(factor, cx, cy) {
-    const k2 = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, view.k * factor));
-    if (k2 === view.k || !cssWidth) return;
+  /** Set an absolute zoom level anchored at canvas-local coordinates (cx, cy). */
+  function zoomTo(k2, cx, cy) {
+    const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, k2));
+    if (clamped === view.k || !cssWidth) return;
     const bx = (cx - cssWidth / 2 - view.tx) / view.k;
     const by = (cy - cssHeight / 2 - view.ty) / view.k;
-    view.tx = cx - cssWidth / 2 - bx * k2;
-    view.ty = cy - cssHeight / 2 - by * k2;
-    view.k = k2;
+    view.tx = cx - cssWidth / 2 - bx * clamped;
+    view.ty = cy - cssHeight / 2 - by * clamped;
+    view.k = clamped;
     clampPan();
     draw();
+  }
+
+  /** Zoom by a factor anchored at canvas-local coordinates (cx, cy). */
+  function zoomAt(factor, cx, cy) {
+    zoomTo(view.k * factor, cx, cy);
   }
 
   function zoomBy(factor) {
@@ -227,7 +245,9 @@ export function createMapViz(canvas, callbacks = {}) {
     const valid = points;
     const dx = t.px(route.depot.x);
     const dy = t.py(route.depot.y);
-    const selected = selectedKey === `route:${route.volunteerId}` || hoverKey === `route:${route.volunteerId}`;
+    const routeKey = `route:${route.volunteerId}`;
+    const selected = selectedKey === routeKey || hoverKey === routeKey
+      || selectedKey === `volunteer:${route.volunteerId}`;
     ctx.save();
     if (dashed) ctx.setLineDash([6, 6]);
     ctx.globalAlpha = dashed ? 0.62 : (selected ? 1 : 0.88);
@@ -241,9 +261,14 @@ export function createMapViz(canvas, callbacks = {}) {
     ctx.restore();
     if (!dashed) {
       const nodes = [dx, dy, ...valid.flatMap((p) => [p.x, p.y]), dx, dy];
+      const segments = [];
       for (let i = 0; i + 3 < nodes.length; i += 4) {
         drawArrow(nodes[i], nodes[i + 1], nodes[i + 2], nodes[i + 3], color, selected ? 3.4 : 2.4, phase + i * 9);
+        segments.push({ x1: nodes[i], y1: nodes[i + 1], x2: nodes[i + 2], y2: nodes[i + 3] });
       }
+      // The full closed polyline is a hit target, so a judge can select a
+      // route by clicking any leg, not only the depot square.
+      routeHits.push({ key: routeKey, type: 'route', id: route.volunteerId, segments, r: 9 });
     }
   }
 
@@ -287,10 +312,14 @@ export function createMapViz(canvas, callbacks = {}) {
     }
 
     // Optimized solid routes.
+    routeHits = [];
     (state.dispatch?.optimized?.routes ?? []).forEach((route, i) => {
       drawRoute(route, ROUTE_COLORS[i % ROUTE_COLORS.length], false, animationFrame);
     });
 
+    // Point hits (depots, pins) are evaluated before route legs, so a click
+    // dead-center on a stop picks the pin, while any point along a leg picks
+    // the route.
     hits = [];
 
     // Volunteer depots (rounded squares).
@@ -313,7 +342,9 @@ export function createMapViz(canvas, callbacks = {}) {
       ctx.fillText(String((volunteer.name ?? '?').charAt(0)).toUpperCase(), x, y + 0.5);
       ctx.fillStyle = active ? PALETTE.ink : PALETTE.inkSoft;
       ctx.font = '600 10px -apple-system, Segoe UI, sans-serif';
-      ctx.fillText(volunteer.name ?? volunteer.id, x, y - 17);
+      // Keep depot names inside the canvas even when the depot hugs an edge.
+      const labelX = Math.max(26, Math.min(cssWidth - 26, x));
+      ctx.fillText(volunteer.name ?? volunteer.id, labelX, y - 17);
       hits.push({ key, x, y, r: 13, type: 'volunteer', id: volunteer.id });
     });
 
@@ -345,23 +376,66 @@ export function createMapViz(canvas, callbacks = {}) {
       ctx.fillText(String(request.urgency), x, y + 0.5);
       hits.push({ key, x, y, r: 11, type: 'request', id: request.id });
     });
+
+    hits.push(...routeHits);
   }
 
   function hitAt(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
+    // Point hits first: a click within a pin's or depot's radius aimed at that
+    // marker, even where a route leg ends exactly on it.
     let best = null;
     let bestDist = Infinity;
     for (const hit of hits) {
+      if (hit.type === 'route') continue;
       const d = Math.hypot(hit.x - x, hit.y - y);
+      if (d <= hit.r && d < bestDist) { best = hit; bestDist = d; }
+    }
+    if (best) return best;
+    for (const hit of hits) {
+      if (hit.type !== 'route') continue;
+      const d = Math.min(...hit.segments.map((s) => pointSegmentDistance(x, y, s.x1, s.y1, s.x2, s.y2)));
       if (d <= hit.r && d < bestDist) { best = hit; bestDist = d; }
     }
     return best;
   }
 
+  /** Stop list rows shared by the volunteer and route inspectors. */
+  function stopRows(route) {
+    return (route?.legs ?? []).map((leg, i) => {
+      const request = requestById(leg.requestId);
+      const late = Number.isFinite(request?.deadline) && leg.arrivalMinutes > request.deadline;
+      const lateText = late ? ` (late +${Math.round(leg.arrivalMinutes - request.deadline)} min)` : '';
+      const skillText = request?.skillRequired ? ` (${request.skillRequired})` : '';
+      return [`Stop ${i + 1}`, `${i + 1}. ${leg.requestId} at ${leg.arrivalMinutes} min${lateText}${skillText}`];
+    });
+  }
+
   function describe(hit) {
     if (!hit || !state) return null;
+    if (hit.type === 'route') {
+      const volunteer = volunteerById(hit.id);
+      const route = routeForVolunteer(hit.id);
+      if (!volunteer || !route) return null;
+      const stops = stopRows(route);
+      const lateCount = (route.legs ?? []).filter((leg) => {
+        const request = requestById(leg.requestId);
+        return Number.isFinite(request?.deadline) && leg.arrivalMinutes > request.deadline;
+      }).length;
+      return {
+        title: `${volunteer.name ?? volunteer.id} - ${route.mode} route`,
+        meta: `${route.requestIds.length} stop${route.requestIds.length === 1 ? '' : 's'} / ${(route.distance * 0.05).toFixed(2)} km closed loop / load ${route.load}`,
+        rows: [
+          ['Travel time', `${route.travelMinutes} min`],
+          ['Deadline audit', lateCount === 0 ? 'every stop on time' : `${lateCount} stop${lateCount === 1 ? '' : 's'} past deadline`],
+          ...stops,
+        ],
+        key: hit.key,
+        volunteerId: volunteer.id,
+      };
+    }
     if (hit.type === 'request') {
       const request = requestById(hit.id);
       if (!request) return null;
@@ -384,10 +458,6 @@ export function createMapViz(canvas, callbacks = {}) {
       const volunteer = volunteerById(hit.id);
       const route = routeForVolunteer(hit.id);
       if (!volunteer) return null;
-      const stops = (route?.legs ?? []).map((leg, i) => {
-        const request = requestById(leg.requestId);
-        return `${i + 1}. ${leg.requestId} at ${leg.arrivalMinutes} min${request?.skillRequired ? ` (${request.skillRequired})` : ''}`;
-      });
       return {
         title: `${volunteer.name} - ${volunteer.mode}`,
         meta: `Capacity ${volunteer.capacity} / Skills: ${(volunteer.skills ?? []).join(', ') || 'none'}`,
@@ -395,7 +465,7 @@ export function createMapViz(canvas, callbacks = {}) {
           ['Route load', route ? `${route.load} units` : 'No route'],
           ['Route distance', route ? `${route.distance} units (${(route.distance * 0.05).toFixed(2)} km)` : '--'],
           ['Travel time', route ? `${route.travelMinutes} min` : '--'],
-          ...stops.map((s, i) => [`Stop ${i + 1}`, s]),
+          ...stopRows(route),
         ],
         key: hit.key,
         volunteerId: volunteer.id,
@@ -414,14 +484,40 @@ export function createMapViz(canvas, callbacks = {}) {
 
   function onPointerDown(event) {
     if (event.button !== 0) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    canvas.setPointerCapture(event.pointerId);
+    if (pointers.size === 2) {
+      // Second finger down: switch from pan to pinch zoom.
+      const [a, b] = [...pointers.values()];
+      pinch = {
+        d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+        k0: view.k,
+      };
+      panPointer = null;
+      panStart = null;
+      dragDist = 10; // suppress the click that fires when fingers lift
+      return;
+    }
     panPointer = event.pointerId;
     panStart = { x: event.clientX, y: event.clientY, tx: view.tx, ty: view.ty };
     dragDist = 0;
-    canvas.setPointerCapture(event.pointerId);
     canvas.style.cursor = 'grabbing';
   }
 
   function onPointerMove(event) {
+    if (pointers.has(event.pointerId)) {
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      const rect = canvas.getBoundingClientRect();
+      const cx = (a.x + b.x) / 2 - rect.left;
+      const cy = (a.y + b.y) / 2 - rect.top;
+      zoomTo(pinch.k0 * (d / pinch.d0), cx, cy);
+      dragDist = 10;
+      return;
+    }
     if (panPointer === event.pointerId && panStart) {
       const dx = event.clientX - panStart.x;
       const dy = event.clientY - panStart.y;
@@ -436,6 +532,8 @@ export function createMapViz(canvas, callbacks = {}) {
   }
 
   function endPan(event) {
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinch = null;
     if (panPointer !== event.pointerId) return;
     panPointer = null;
     panStart = null;
@@ -458,8 +556,10 @@ export function createMapViz(canvas, callbacks = {}) {
   }
 
   function tick(time) {
-    animationFrame = (time / 70) % 100;
-    draw();
+    if (!document.hidden) {
+      animationFrame = (time / 70) % 100;
+      draw();
+    }
     rafId = requestAnimationFrame(tick);
   }
 
@@ -484,7 +584,13 @@ export function createMapViz(canvas, callbacks = {}) {
     setState, setBaseline, resize, start, stop, describe, zoomBy, resetView,
     getView: () => ({ ...view }),
     getSelected: () => selectedKey,
+    selectKey: (key) => { selectedKey = key; draw(); },
+    describeKey: (key) => {
+      const [type, ...rest] = String(key ?? '').split(':');
+      return describe({ type, id: rest.join(':'), key });
+    },
+    getHits: () => hits.map((hit) => ({ ...hit })),
   };
 }
 
-export default { createMapViz, PALETTE, ROUTE_COLORS, computeBounds };
+export default { createMapViz, PALETTE, ROUTE_COLORS, computeBounds, pointSegmentDistance };

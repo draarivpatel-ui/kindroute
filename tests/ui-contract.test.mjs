@@ -179,7 +179,7 @@ test('no external CDN, font, map tile or analytics URLs in shipped app files', (
 });
 
 test('service worker caches relative assets only inside its own scope', () => {
-  assert.match(SW, /const CACHE = 'kindroute-v2'/);
+  assert.match(SW, /const CACHE = 'kindroute-v\d+'/);
   assert.match(SW, /if \(url\.origin !== self\.location\.origin\) return;/);
   assert.match(SW, /url\.pathname\.startsWith\(SCOPE\)/);
   for (const asset of ['./index.html', './styles.css', './src/app.js', './src/map-viz.js', './sw.js']) {

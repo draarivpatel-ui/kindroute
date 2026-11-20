@@ -3,7 +3,7 @@
  * Caches only relative assets under the app's own /kindroute/ subpath.
  * No external origins, no runtime network fallbacks, no tracking.
  */
-const CACHE = 'kindroute-v2';
+const CACHE = 'kindroute-v3';
 const SCOPE = new URL('./', self.registration.scope).pathname;
 const ASSETS = [
   './',

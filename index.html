@@ -29,7 +29,7 @@
     </div>
   </header>
 
-  <nav class="tabbar" aria-label="Workspace views">
+  <nav class="tabbar" role="tablist" aria-label="Workspace views">
     <button class="tab is-active" id="tab-map" type="button" role="tab" aria-selected="true" aria-controls="panel-map">Dispatch map</button>
     <button class="tab" id="tab-algo" type="button" role="tab" aria-selected="false" aria-controls="panel-algo">Under the hood</button>
     <button class="tab" id="tab-card" type="button" role="tab" aria-selected="false" aria-controls="panel-card">Volunteer card</button>
@@ -153,13 +153,13 @@
               </div>
               <div class="metric">
                 <span class="metric-label">Total distance</span>
-                <strong class="metric-value tabular" id="metric-distance">-- / -- km</strong>
-                <span class="metric-note">Optimized / FCFS</span>
+                <strong class="metric-value tabular" id="metric-distance">-- / --</strong>
+                <span class="metric-note">km, optimized / FCFS</span>
               </div>
               <div class="metric">
                 <span class="metric-label">Median response</span>
-                <strong class="metric-value tabular" id="metric-latency">-- / -- min</strong>
-                <span class="metric-note">Median arrival ETA</span>
+                <strong class="metric-value tabular" id="metric-latency">-- / --</strong>
+                <span class="metric-note">min, median arrival ETA</span>
               </div>
               <div class="metric">
                 <span class="metric-label">Workload Gini</span>
@@ -217,7 +217,7 @@
           <div class="matrix-legend">
             <span><i class="chipkey chipkey-zero"></i> Zero</span>
             <span><i class="chipkey chipkey-star"></i> Starred provisional match</span>
-            <span><i class="chipkey chipkey-cover"></i> Covered column</span>
+            <span><i class="chipkey chipkey-cover"></i> Covered row or column</span>
             <span><i class="chipkey chipkey-path"></i> Augmenting path</span>
           </div>
         </div>

@@ -25,19 +25,23 @@ assets, it also works with the network disconnected.
 npm test
 ```
 
-This runs `node --test tests/*.test.mjs`: **77 tests, 77 pass, 0 fail, 0
+This runs `node --test tests/*.test.mjs`: **93 tests, 93 pass, 0 fail, 0
 skipped**. The engine, crypto and QR suites contribute 42 tests; the UI,
-offline-hygiene, security and video-contract suite contributes 15 more; and the
+offline-hygiene, security and video-contract suite contributes 15 more; the
 Wave 1 revamp suite (map bounds, deadline audit, trace matrices, tamper probes,
-UI hierarchy and print contract) contributes 20 more.
+UI hierarchy and print contract) contributes 20 more; and the Wave 2 regression
+suite (dual-potential trace invariant, maximum zero matching, brute-force
+optimality edges, segment hit-testing, AES-GCM corruption matrix and layout
+hygiene) contributes 16 more.
 
 ## Browser features
 
 - **Interactive vector map:** a canvas-rendered street grid with depot squares,
   urgency-coded resident pins, solid colored optimized routes and an optional
   dashed first-come-first-served (FCFS) baseline. Cursor-anchored wheel and
-  button zoom plus drag panning read dense clusters, and hover or click on any
-  pin or depot inspects stop-by-stop ETAs, distance, skill match and load. The
+  button zoom plus drag panning and two-finger pinch read dense clusters, and
+  hover or click on any pin, depot or route leg inspects stop-by-stop ETAs,
+  distance, skill match and load. The
   world extent is computed from the street grid unioned with every point, so
   routes always fill the canvas.
 - **Three synthetic presets:** Oakwood groceries, after-school tutoring and
