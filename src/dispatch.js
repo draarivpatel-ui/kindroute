@@ -150,7 +150,7 @@ export function runDispatch(scenario, options = {}) {
   const baselineAssignments = naiveFcfsAssignments(volunteers, requests);
   const baseline = baselineDispatch(baselineAssignments);
   const metrics = compareDispatch(optimized, baseline, { volunteers, requests });
-  const servedIds = new Set(matched.matches.map((m) => m.requestId));
+  const routedIds = new Set(optimized.routes.flatMap((r) => r.requestIds));
   return {
     scenarioId: scenario.id,
     matched,
@@ -158,7 +158,8 @@ export function runDispatch(scenario, options = {}) {
     optimized,
     baseline,
     metrics,
-    unfulfilledRequests: requests.filter((r) => !servedIds.has(r.id)).length,
+    unfulfilled: optimized.unfulfilled,
+    unfulfilledRequests: requests.filter((r) => !routedIds.has(r.id)).length,
   };
 }
 

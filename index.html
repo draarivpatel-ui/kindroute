@@ -30,9 +30,9 @@
   </header>
 
   <nav class="tabbar" role="tablist" aria-label="Workspace views">
-    <button class="tab is-active" id="tab-map" type="button" role="tab" aria-selected="true" aria-controls="panel-map">Dispatch map</button>
-    <button class="tab" id="tab-algo" type="button" role="tab" aria-selected="false" aria-controls="panel-algo">Under the hood</button>
-    <button class="tab" id="tab-card" type="button" role="tab" aria-selected="false" aria-controls="panel-card">Volunteer card</button>
+    <button class="tab is-active" id="tab-map" type="button" role="tab" aria-selected="true" aria-controls="panel-map" tabindex="0">Dispatch map</button>
+    <button class="tab" id="tab-algo" type="button" role="tab" aria-selected="false" aria-controls="panel-algo" tabindex="-1">Under the hood</button>
+    <button class="tab" id="tab-card" type="button" role="tab" aria-selected="false" aria-controls="panel-card" tabindex="-1">Volunteer card</button>
     <span class="tabbar-note">Zero network. Zero accounts. Deterministic.</span>
   </nav>
 
@@ -126,7 +126,7 @@
               </div>
             </div>
             <div class="map-wrap" id="map-wrap">
-              <canvas id="map-canvas" aria-label="Interactive vector map of synthetic neighborhood routes"></canvas>
+              <canvas id="map-canvas" tabindex="0" aria-label="Interactive vector map of synthetic neighborhood routes. Arrow keys pan, plus and minus zoom, 0 resets the view."></canvas>
               <div class="map-legend" id="map-legend" aria-hidden="true">
                 <span><i class="legend-line legend-route"></i> Optimized</span>
                 <span><i class="legend-line legend-fcfs"></i> FCFS</span>
@@ -144,6 +144,11 @@
           <div class="card baseline-card" id="baseline-card">
             <div class="card-head">
               <h2>KindRoute vs naive FCFS baseline</h2>
+              <div class="export-cluster" role="group" aria-label="Export route proof">
+                <button class="btn btn-quiet" id="export-json" type="button">Proof JSON</button>
+                <button class="btn btn-quiet" id="export-csv" type="button">Summary CSV</button>
+                <span class="head-stat tabular" id="proof-hash" title="Deterministic fingerprint of the current route proof">fnv --</span>
+              </div>
             </div>
             <div class="metric-grid">
               <div class="metric metric-hero">
@@ -244,6 +249,36 @@
             </table>
           </div>
         </div>
+      </div>
+      <div class="card access-card">
+        <div class="card-head">
+          <h2>Accessible street routing</h2>
+          <span class="head-stat">Multi-objective Dijkstra</span>
+        </div>
+        <div class="access-controls">
+          <label class="mini-field">Routing profile
+            <select id="access-profile">
+              <option value="wheelchair" selected>Wheelchair</option>
+              <option value="pedestrian">Pedestrian</option>
+              <option value="shade">Shade priority</option>
+              <option value="fastest">Fastest</option>
+            </select>
+          </label>
+          <label class="mini-field">From
+            <select id="access-from" aria-label="Start node"></select>
+          </label>
+          <label class="mini-field">To
+            <select id="access-to" aria-label="End node"></select>
+          </label>
+          <button class="btn btn-primary" id="access-run" type="button">Find path</button>
+        </div>
+        <div class="access-result">
+          <strong class="access-status" id="access-status">--</strong>
+          <div class="access-path" id="access-path" aria-label="Chosen path"></div>
+          <p class="fineprint" id="access-detail"></p>
+          <ul class="access-edges" id="access-edges"></ul>
+        </div>
+        <p class="fineprint">One synthetic network, different constraints. Wheelchair requires curb ramps and grades at or under 8%; shade priority weights covered pavement; fastest only cares about distance. When no fully compliant path exists, the solver relaxes one limit at a time and names each relaxation, or reports the unreachable frontier.</p>
       </div>
       <div class="card algo-notes">
         <h2>How the trace is produced</h2>

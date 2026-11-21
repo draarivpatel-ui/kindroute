@@ -302,6 +302,25 @@ button { cursor: pointer; }
 .vv-time { font: 700 13px var(--mono); color: var(--emerald-dark); align-self: center; }
 .vv-error { border: 1px solid #e3b6a8; background: var(--terra-tint); color: #8d2e1d; border-radius: 10px; padding: 16px; font-size: 13px; }
 
+/* ---------- Accessible routing lab + export ---------- */
+.export-cluster { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.export-cluster .btn { padding: 6px 10px; font-size: 11px; }
+.access-card { margin: 16px auto 0; max-width: 1920px; }
+.access-controls { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.access-controls .mini-field { min-width: 140px; flex: none; }
+.access-controls select { border: 1px solid var(--line-strong); border-radius: 7px; background: #fff; padding: 7px 8px; font-size: 12px; }
+.access-status { font-size: 14px; display: block; margin-bottom: 8px; }
+.access-status.is-optimal, .access-status.is-trivial { color: var(--emerald-dark); }
+.access-status.is-relaxed { color: var(--amber); }
+.access-status.is-unreachable { color: var(--terra); }
+.access-path { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 8px; min-height: 26px; }
+.access-edges { list-style: none; margin: 10px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.access-edges li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.access-edges li.violates { border-color: #e6cd9a; background: var(--amber-tint); }
+.access-edges .meta { color: var(--ink-soft); font-family: var(--mono); font-size: 10px; text-align: right; }
+#map-canvas:focus-visible { outline: 3px solid var(--emerald); outline-offset: -3px; }
+.tab:focus-visible { outline: 2px solid var(--emerald); outline-offset: -2px; border-radius: 4px 4px 0 0; }
+
 /* ---------- Toast / footer ---------- */
 .toast {
   position: fixed; right: 20px; bottom: 20px; z-index: 200; max-width: min(420px, calc(100vw - 40px));
@@ -347,6 +366,9 @@ button { cursor: pointer; }
   .link-row { flex-direction: column; }
   .vv-head { flex-direction: column; }
   .footer { flex-direction: column; }
+  .access-edges li { flex-direction: column; gap: 2px; }
+  .access-edges .meta { text-align: left; }
+  .baseline-card .card-head { flex-direction: column; align-items: stretch; }
 }
 
 /* ---------- Print: only the route sheet renders ---------- */

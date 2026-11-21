@@ -192,6 +192,15 @@ export function createMapViz(canvas, callbacks = {}) {
     draw();
   }
 
+  /** Pan by canvas-pixel deltas, clamped like a drag pan. Used by arrow keys. */
+  function panBy(dx, dy) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    view.tx += dx;
+    view.ty += dy;
+    clampPan();
+    draw();
+  }
+
   function requestById(id) {
     return (state?.scenario?.requests ?? []).find((r) => r.id === id) ?? null;
   }
@@ -581,7 +590,7 @@ export function createMapViz(canvas, callbacks = {}) {
   window.addEventListener('resize', resize);
 
   return {
-    setState, setBaseline, resize, start, stop, describe, zoomBy, resetView,
+    setState, setBaseline, resize, start, stop, describe, zoomBy, resetView, panBy,
     getView: () => ({ ...view }),
     getSelected: () => selectedKey,
     selectKey: (key) => { selectedKey = key; draw(); },

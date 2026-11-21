@@ -7,7 +7,7 @@
  * innerHTML. Only the project's own QR SVG renderer produces markup, and its
  * output is derived from numeric module paths with escaped color constants.
  */
-import { runDispatch, SCENARIOS, cloneScenario, injectSurge, hungarian, encryptCard, decryptCard, parseShareFragment, renderQrSvg, twoOpt, distance, TRAVEL_MODES } from './index.js';
+import { runDispatch, SCENARIOS, cloneScenario, injectSurge, hungarian, encryptCard, decryptCard, parseShareFragment, renderQrSvg, twoOpt, distance, TRAVEL_MODES, findAccessibleRoute, accessDemoGraph, routeProofJson, routeSummaryCsv, buildRouteProof } from './index.js';
 import { createMapViz } from './map-viz.js';
 
 /**
@@ -170,6 +170,136 @@ function updateMetrics() {
   setText('map-status', state.dispatch.optimized.routes.length
     ? `${state.dispatch.optimized.routes.length} optimized routes, ${state.dispatch.optimized.swapTrace.length} accepted 2-opt swaps. Drag to pan, scroll to zoom.`
     : 'No feasible routes in this synthetic model.');
+  updateProofHash();
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic route-proof export
+// ---------------------------------------------------------------------------
+function updateProofHash() {
+  try {
+    const proof = buildRouteProof(state.scenario, state.dispatch);
+    setText('proof-hash', `fnv ${proof.fingerprint.slice(0, 12)}`);
+    $('proof-hash').title = `FNV-1a fingerprint ${proof.fingerprint} of the canonical route proof`;
+  } catch {
+    setText('proof-hash', 'fnv unavailable');
+  }
+}
+
+function downloadText(filename, text, mime) {
+  try {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } catch (error) {
+    toast(`Download failed: ${error.message}`, true);
+    return false;
+  }
+}
+
+function exportProofJson() {
+  const text = routeProofJson(state.scenario, state.dispatch);
+  if (downloadText(`kindroute-${state.scenario.id}-proof.json`, text, 'application/json')) {
+    toast('Route proof JSON downloaded (deterministic)');
+  }
+}
+
+function exportSummaryCsv() {
+  const text = routeSummaryCsv(state.scenario, state.dispatch);
+  if (downloadText(`kindroute-${state.scenario.id}-summary.csv`, text, 'text/csv')) {
+    toast('Route summary CSV downloaded (deterministic)');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Accessible street routing lab
+// ---------------------------------------------------------------------------
+const ACCESS_GRAPH = accessDemoGraph();
+
+function initAccessLab() {
+  const from = $('access-from');
+  const to = $('access-to');
+  for (const node of ACCESS_GRAPH.nodes) {
+    from.append(el('option', null, node.id));
+    to.append(el('option', null, node.id));
+  }
+  from.value = 'A';
+  to.value = 'G';
+  $('access-run').addEventListener('click', runAccessLab);
+  $('access-profile').addEventListener('change', runAccessLab);
+  from.addEventListener('change', runAccessLab);
+  to.addEventListener('change', runAccessLab);
+  runAccessLab();
+}
+
+function runAccessLab() {
+  try {
+    const result = findAccessibleRoute(ACCESS_GRAPH, $('access-from').value, $('access-to').value, { profile: $('access-profile').value });
+    const statusBox = $('access-status');
+    const statusText = {
+      optimal: 'Optimal compliant path',
+      relaxed: 'Relaxed path, limits lifted',
+      unreachable: 'Unreachable under this profile',
+      trivial: 'Start and end are the same node',
+    }[result.status] ?? result.status;
+    statusBox.textContent = statusText;
+    statusBox.className = `access-status is-${result.status}`;
+
+    const pathBox = $('access-path');
+    pathBox.replaceChildren();
+    if (result.path.length) {
+      result.path.forEach((id, i) => {
+        if (i) pathBox.append(el('span', 'order-arrow', '>'));
+        pathBox.append(el('span', 'order-node', id));
+      });
+    } else {
+      pathBox.append(el('span', 'fineprint', 'No path found.'));
+    }
+
+    if (result.status === 'unreachable') {
+      const d = result.diagnostics;
+      setText('access-detail',
+        `${d.strictReachableNodes} of ${d.totalNodes} nodes reachable under strict limits, ${d.relaxedReachableNodes} with every limit lifted. Blocked edges: ${d.blockedEdges.grade} over grade, ${d.blockedEdges.curb} missing curb ramps, ${d.blockedEdges.stairs} stairs. ${d.hint}`);
+    } else {
+      const relaxed = result.relaxedConstraints.length
+        ? ` Relaxed: ${result.relaxedConstraints.join(' then ')}.`
+        : '';
+      const parts = [`cost ${result.cost}`, `${result.totalLength} units`, `${result.edges.length} legs`, `${result.diagnostics.nodesExpanded} nodes expanded`];
+      const b = result.breakdown;
+      const soft = [`distance ${b.distance}`, `grade ${b.gradePenalty}`, `shade ${b.shadePenalty}`, `surface ${b.surfacePenalty}`, `curb ${b.curbPenalty}`].filter((_, i) => [b.distance, b.gradePenalty, b.shadePenalty, b.surfacePenalty, b.curbPenalty][i] !== 0);
+      setText('access-detail', `${parts.join(' / ')}. Cost split: ${soft.join(' + ')}.${relaxed}`);
+    }
+
+    const list = $('access-edges');
+    list.replaceChildren();
+    for (const edge of result.edges) {
+      const li = el('li');
+      li.append(el('span', null, `${edge.name} (${edge.a} to ${edge.b})`));
+      const flags = [
+        `len ${edge.length}`,
+        `grade ${edge.gradePct}%`,
+        `shade ${edge.shadePct}%`,
+        edge.curbRamps ? 'curb ramp' : 'no curb ramp',
+        edge.surface,
+        `cost ${edge.cost}`,
+      ];
+      if (edge.violations.length) {
+        li.classList.add('violates');
+        flags.push(`violates ${edge.violations.join(' + ')}`);
+      }
+      li.append(el('span', 'meta', flags.join(' / ')));
+      list.append(li);
+    }
+  } catch (error) {
+    toast(`Route solve failed: ${error.message}`, true);
+  }
 }
 
 const VOL_COLORS = ['#0f766e', '#b45309', '#b4462f', '#3b6ea5', '#6d4aa8', '#7a5c1e'];
@@ -616,13 +746,18 @@ function exitVolunteerView() {
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
+const TAB_ORDER = ['map', 'algo', 'card'];
+
 function showTab(name) {
   state.activeTab = name;
   const ids = { map: 'panel-map', algo: 'panel-algo', card: 'panel-card' };
   for (const [tabName, panelId] of Object.entries(ids)) {
     const active = tabName === name;
-    $(`tab-${tabName}`).classList.toggle('is-active', active);
-    $(`tab-${tabName}`).setAttribute('aria-selected', String(active));
+    const tab = $(`tab-${tabName}`);
+    tab.classList.toggle('is-active', active);
+    tab.setAttribute('aria-selected', String(active));
+    // Roving tabindex: only the active tab sits in the tab order.
+    tab.tabIndex = active ? 0 : -1;
     $(panelId).hidden = !active;
     $(panelId).classList.toggle('is-active', active);
   }
@@ -647,7 +782,14 @@ function wire() {
   $('add-request').addEventListener('click', () => {
     const description = $('request-desc').value.trim().slice(0, 48) || 'New synthetic request';
     const urgency = Math.max(1, Math.min(5, Number($('request-urgency').value) || 3));
-    const load = Math.max(1, Math.min(6, Number($('request-load').value) || 1));
+    const rawLoad = $('request-load').value.trim();
+    const parsedLoad = Number(rawLoad);
+    if (rawLoad === '' || !Number.isFinite(parsedLoad) || parsedLoad < 1 || parsedLoad > 6) {
+      toast('Load must be a number from 1 to 6.', true);
+      $('request-load').focus();
+      return;
+    }
+    const load = Math.round(parsedLoad);
     const grid = state.scenario.grid ?? { columns: 9, rows: 8 };
     const seq = state.scenario.requests.length + 1;
     const location = {
@@ -673,7 +815,12 @@ function wire() {
   function adjustCapacity(delta) {
     const volunteer = state.scenario.volunteers.find((v) => v.id === $('capacity-volunteer').value);
     if (!volunteer) return;
-    volunteer.capacity = Math.max(1, Math.min(12, (volunteer.capacity ?? 1) + delta));
+    const next = Math.max(1, Math.min(12, (volunteer.capacity ?? 1) + delta));
+    if (next === (volunteer.capacity ?? 1)) {
+      toast('Volunteer capacity stays between 1 and 12.', true);
+      return;
+    }
+    volunteer.capacity = next;
     updateCapacityValue();
     solve({ announce: true });
   }
@@ -684,6 +831,44 @@ function wire() {
   $('zoom-in').addEventListener('click', () => mapViz?.zoomBy(1.35));
   $('zoom-out').addEventListener('click', () => mapViz?.zoomBy(1 / 1.35));
   $('reset-view').addEventListener('click', () => { showInspection(null); mapViz?.resetView(); });
+  $('export-json').addEventListener('click', exportProofJson);
+  $('export-csv').addEventListener('click', exportSummaryCsv);
+
+  // Keyboard map control: the canvas is focusable; arrows pan, plus and
+  // minus zoom, 0 resets. Mirrors the pointer pan/zoom exactly.
+  $('map-canvas').addEventListener('keydown', (event) => {
+    const step = 48;
+    const pan = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+    if (pan) {
+      event.preventDefault();
+      mapViz?.panBy(pan[0], pan[1]);
+    } else if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      mapViz?.zoomBy(1.25);
+    } else if (event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      mapViz?.zoomBy(1 / 1.25);
+    } else if (event.key === '0') {
+      event.preventDefault();
+      showInspection(null);
+      mapViz?.resetView();
+    }
+  });
+
+  // ARIA tabs keyboard contract: Left/Right move between tabs, Home/End jump
+  // to the ends. Focus follows selection (automatic activation).
+  document.querySelector('.tabbar').addEventListener('keydown', (event) => {
+    const index = TAB_ORDER.indexOf(state.activeTab);
+    let next = -1;
+    if (event.key === 'ArrowRight') next = (index + 1) % TAB_ORDER.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = TAB_ORDER.length - 1;
+    if (next < 0 || next === index) return;
+    event.preventDefault();
+    showTab(TAB_ORDER[next]);
+    $(`tab-${TAB_ORDER[next]}`).focus();
+  });
 
   $('hung-prev').addEventListener('click', () => { state.hungIndex = Math.max(0, state.hungIndex - 1); updateHungarian(); });
   $('hung-next').addEventListener('click', () => { state.hungIndex = Math.min(state.hungSteps.length - 1, state.hungIndex + 1); updateHungarian(); });
@@ -732,6 +917,7 @@ function boot() {
   });
   wire();
   solve();
+  initAccessLab();
   mapViz.resize();
   mapViz.start();
   const offlineChip = $('offline-chip');

@@ -88,14 +88,36 @@ function routeLoad(order, points) {
   return order.reduce((sum, idx) => sum + (points[idx].load ?? 1), 0);
 }
 
-function routeFeasible(order, points, config) {
-  if (order.length === 0) return false;
-  if (routeLoad(order, points) > config.maxLoad + 1e-9) return false;
-  const dist = routeDistance(order, points);
+function routeTimeBudget(order, points, config) {
   const latest = Math.max(...order.map((idx) => points[idx].deadline ?? Number.POSITIVE_INFINITY));
   const earliest = Math.min(...order.map((idx) => points[idx].readyAt ?? 0));
-  const timeBudget = Math.min(config.maxMinutes, latest - earliest);
-  return dist / config.speed <= timeBudget + 1e-9;
+  return Math.min(config.maxMinutes, latest - earliest);
+}
+
+/**
+ * Feasibility is checked on the CLOSED loop: a volunteer must return home,
+ * so depot legs count against the time budget. Merge-time checks and the
+ * emitted-route audit share this one predicate.
+ */
+function routeFeasible(order, points, config, depot) {
+  if (order.length === 0) return false;
+  if (routeLoad(order, points) > config.maxLoad + 1e-9) return false;
+  const dist = closedDistance(order, points, depot);
+  return dist / config.speed <= routeTimeBudget(order, points, config) + 1e-9;
+}
+
+/**
+ * Explain why a cluster cannot be served: one entry per violated limit.
+ * Returned as an ordered, stable list so diagnostics are deterministic.
+ */
+function diagnoseCluster(order, points, config, depot) {
+  const reasons = [];
+  if (routeLoad(order, points) > config.maxLoad + 1e-9) reasons.push('load-exceeds-capacity');
+  const dist = closedDistance(order, points, depot);
+  if (dist / config.speed > routeTimeBudget(order, points, config) + 1e-9) {
+    reasons.push('travel-exceeds-time-budget');
+  }
+  return reasons;
 }
 
 /**
@@ -193,9 +215,21 @@ export function optimizeRoutes(assignments) {
 
   for (const assignment of assignments) {
     const volunteer = assignment.volunteer;
-    if (!volunteer || !volunteer.home) continue;
-    const config = modeConfig(volunteer);
     const points = (assignment.requests ?? []).map(toPoint);
+    // A volunteer without a usable depot cannot serve anything; each request
+    // is reported as unfulfilled instead of being silently dropped.
+    if (!volunteer || !Number.isFinite(volunteer.home?.x) || !Number.isFinite(volunteer.home?.y)) {
+      for (const point of points) {
+        unfulfilled.push({
+          requestId: point.id,
+          request: point,
+          volunteerId: volunteer?.id ?? null,
+          reasons: ['volunteer-missing-depot'],
+        });
+      }
+      continue;
+    }
+    const config = modeConfig(volunteer);
     const depot = volunteer.home;
 
     // Clarke-Wright savings list: merging stops i and j saves
@@ -207,7 +241,9 @@ export function optimizeRoutes(assignments) {
         savings.push({ i, j, saving });
       }
     }
-    savings.sort((a, b) => b.saving - a.saving);
+    // Deterministic tie-break: equal savings merge the lowest (i, j) first,
+    // so equal-value merges never depend on engine sort stability.
+    savings.sort((a, b) => (b.saving - a.saving) || (a.i - b.i) || (a.j - b.j));
 
     // Start with one route per stop.
     let clusters = points.map((_, idx) => [idx]);
@@ -224,7 +260,7 @@ export function optimizeRoutes(assignments) {
       const a = clusters[ci];
       const b = clusters[cj];
       const combined = a.concat(b);
-      if (!routeFeasible(combined, points, config)) continue;
+      if (!routeFeasible(combined, points, config, depot)) continue;
       clusters = clusters.filter((_, k) => k !== ci && k !== cj);
       clusters.push(combined);
       merged.add(`${item.i}-${item.j}`);
@@ -252,6 +288,20 @@ export function optimizeRoutes(assignments) {
       }
       const load = routeLoad(cluster, points);
       const travelMinutes = polished.distance / config.speed;
+      // Honest emit: a cluster that violates capacity or the closed-loop time
+      // budget is not served; its stops land in unfulfilled with reasons.
+      const reasons = diagnoseCluster(polished.order, points, config, depot);
+      if (reasons.length) {
+        for (const idx of polished.order) {
+          unfulfilled.push({
+            requestId: points[idx].id,
+            request: points[idx],
+            volunteerId: volunteer.id,
+            reasons: reasons.slice(),
+          });
+        }
+        continue;
+      }
       routes.push({
         volunteerId: volunteer.id,
         mode: volunteer.mode ?? 'walk',
@@ -289,9 +339,19 @@ export function baselineDispatch(assignments) {
   const unfulfilled = [];
   for (const assignment of assignments) {
     const volunteer = assignment.volunteer;
-    if (!volunteer || !volunteer.home) continue;
-    const config = modeConfig(volunteer);
     const points = (assignment.requests ?? []).map(toPoint);
+    if (!volunteer || !Number.isFinite(volunteer.home?.x) || !Number.isFinite(volunteer.home?.y)) {
+      for (const point of points) {
+        unfulfilled.push({
+          requestId: point.id,
+          request: point,
+          volunteerId: volunteer?.id ?? null,
+          reasons: ['volunteer-missing-depot'],
+        });
+      }
+      continue;
+    }
+    const config = modeConfig(volunteer);
     const order = points.map((_, idx) => idx);
     const load = routeLoad(order, points);
     const dist = closedDistance(order, points, volunteer.home);

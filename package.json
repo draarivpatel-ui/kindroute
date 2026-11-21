@@ -11,7 +11,9 @@
     "./routing": "./src/routing.js",
     "./scenarios": "./src/scenarios.js",
     "./crypto-card": "./src/crypto-card.js",
-    "./qr-svg": "./src/qr-svg.js"
+    "./qr-svg": "./src/qr-svg.js",
+    "./accessible-routing": "./src/accessible-routing.js",
+    "./route-proof": "./src/route-proof.js"
   },
   "engines": {
     "node": ">=20"

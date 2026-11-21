@@ -25,14 +25,18 @@ assets, it also works with the network disconnected.
 npm test
 ```
 
-This runs `node --test tests/*.test.mjs`: **93 tests, 93 pass, 0 fail, 0
+This runs `node --test tests/*.test.mjs`: **158 tests, 158 pass, 0 fail, 0
 skipped**. The engine, crypto and QR suites contribute 42 tests; the UI,
 offline-hygiene, security and video-contract suite contributes 15 more; the
 Wave 1 revamp suite (map bounds, deadline audit, trace matrices, tamper probes,
-UI hierarchy and print contract) contributes 20 more; and the Wave 2 regression
+UI hierarchy and print contract) contributes 20 more; the Wave 2 regression
 suite (dual-potential trace invariant, maximum zero matching, brute-force
 optimality edges, segment hit-testing, AES-GCM corruption matrix and layout
-hygiene) contributes 16 more.
+hygiene) contributes 16 more; and the Wave 3 suite (accessible-routing
+optimality vs brute force over every simple path, the relaxation ladder,
+unreachable diagnostics, dispatch unfulfilled audits, deterministic
+route-proof exports, keyboard contracts and invalid-input handling)
+contributes 65 more.
 
 ## Browser features
 
@@ -60,6 +64,27 @@ hygiene) contributes 16 more.
   now carries its own reduced matrix and full volunteer/request labels, so the
   heatmap always shows the solver's true state. It also steps through every
   accepted 2-opt swap with the exact km shaved per reversal.
+- **Accessible street routing lab:** a second routing engine plans a single
+  path across an attributed street graph (length, steepness grade, shade
+  coverage, curb ramps, surface class) under a chosen profile. Wheelchair
+  requires curb ramps and grades at or under 8%; shade priority weights
+  covered pavement; fastest only cares about distance. When strict limits
+  leave the destination unreachable, a fixed relaxation ladder lifts one
+  limit at a time and names each lifted constraint on the violating edges;
+  when even the fully relaxed graph cannot connect, the card reports the
+  reachable frontier, the blocked-edge counts and the nearest reachable
+  node to the target.
+- **Deterministic route-proof export:** Proof JSON downloads a canonical
+  route proof (keys sorted at every depth, a 64-bit FNV-1a fingerprint and
+  self-checks that recompute totals, capacity and the deadline audit), and
+  Summary CSV downloads a flat metrics-plus-stops table with RFC 4180
+  escaping and spreadsheet-formula guards. Same dispatch, same bytes, same
+  fingerprint shown inline before download.
+- **Keyboard operation:** the canvas map is focusable and pans with the
+  arrow keys, zooms with plus/minus and resets with 0, and the tab bar
+  follows the ARIA roving-tabindex pattern (Left/Right to move, Home/End to
+  jump). Invalid inputs such as an empty or out-of-range load field show a
+  clear error toast instead of silently clamping.
 - **Encrypted dispatch cards:** click a volunteer to seal a JSON route card
   with AES-256-GCM using a fresh 256-bit key and random 96-bit IV. The inline
   ISO QR SVG encodes a `#card=...&k=...` link. Copy Link, Printable Route Sheet
@@ -78,7 +103,9 @@ hygiene) contributes 16 more.
 | `src/scenarios.js` | Three seeded synthetic neighborhood presets and a deterministic surge injector |
 | `src/dispatch.js` | Cost-matrix construction, constrained matching and the end-to-end pipeline |
 | `src/qr-svg.js` | Zero-dependency ISO/IEC 18004 QR encoder and crisp SVG renderer |
-| `src/map-viz.js` | Offline canvas vector map with zoom, pan, hover and click inspection |
+| `src/map-viz.js` | Offline canvas vector map with zoom, pan, keyboard pan, hover and click inspection |
+| `src/accessible-routing.js` | Multi-objective Dijkstra over attributed street graphs with hard limits, a relaxation ladder and unreachable diagnostics |
+| `src/route-proof.js` | Canonical route-proof object, FNV-1a fingerprint, deterministic JSON and CSV export |
 | `src/app.js` | Browser controller, algorithm steppers, tamper proof and encrypted-card flow |
 | `src/index.js` | Barrel exporting all public APIs |
 | `sw.js` | Scope-limited service worker caching only relative app assets |
@@ -107,6 +134,37 @@ never has to fall back to raw costs mid-trace.
 where each stop records `requestId`, `volunteerId`, `arrivalMinutes`,
 `deadline` and `latenessMinutes`. The audit measures the honest failure mode of
 dispatch planning: a stop can be served yet still arrive late.
+
+## Accessible routing engine
+
+```js
+import { findAccessibleRoute, accessDemoGraph } from './src/accessible-routing.js';
+
+const result = findAccessibleRoute(accessDemoGraph(), 'A', 'G', { profile: 'wheelchair' });
+// result.status: 'optimal' | 'relaxed' | 'unreachable' | 'trivial'
+// result.relaxedConstraints names each lifted limit, in ladder order
+```
+
+`findAccessibleRoute(graph, from, to, options)` validates the graph up front
+(TypeErrors name the bad field), runs Dijkstra over a binary heap with
+deterministic (cost, insertion-order) tie-breaking, then falls back through a
+relaxation ladder (grade limit, curb ramps, stairs) when the strict graph
+cannot connect. Costs decompose into distance, grade, shade, surface and curb
+terms; the test suite checks solver output against a brute-force enumeration
+of every simple path on seeded attributed graphs.
+
+`optimizeRoutes(assignments)` also returns `unfulfilled[]`: one entry per
+request a volunteer could not honestly serve, with ordered reasons such as
+`load-exceeds-capacity`, `travel-exceeds-time-budget` and
+`volunteer-missing-depot`. Feasibility is audited on the closed loop (the
+volunteer returns home), so a stop cannot be listed as served while failing
+its real constraints.
+
+`buildRouteProof(scenario, dispatch)` packages a dispatch run into a
+self-verifiable object: matching summary, metrics, every route leg,
+unfulfilled diagnostics and a `checks` block (recomputed distance, capacity
+violations, late-stop recount) plus a `fingerprint`.
+`routeProofJson` and `routeSummaryCsv` are the downloadable forms.
 
 ## Encrypted shareable cards
 
