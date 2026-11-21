@@ -16,12 +16,6 @@
 // Standard tables (ISO/IEC 18004, Tables 7, 9 and 13)
 // ---------------------------------------------------------------------------
 
-/** Total codewords in each version, 1 through 20. */
-const TOTAL_CODEWORDS = [
-  26, 44, 70, 100, 134, 172, 196, 242, 292, 346,
-  404, 466, 532, 581, 655, 733, 815, 901, 991, 1085,
-];
-
 /**
  * Error-correction codewords per block for each version (L then M).
  * Indexed by version, so ECW_PER_BLOCK.L[v - 1] is version v.

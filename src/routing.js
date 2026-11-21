@@ -211,7 +211,6 @@ export function optimizeRoutes(assignments) {
 
     // Start with one route per stop.
     let clusters = points.map((_, idx) => [idx]);
-    const merged = new Set();
     for (const item of savings) {
       if (item.saving <= 0) continue;
       let ci = -1;
@@ -227,7 +226,6 @@ export function optimizeRoutes(assignments) {
       if (!routeFeasible(combined, points, config)) continue;
       clusters = clusters.filter((_, k) => k !== ci && k !== cj);
       clusters.push(combined);
-      merged.add(`${item.i}-${item.j}`);
       savingsSteps.push({
         index: stepIndex++,
         volunteerId: volunteer.id,
