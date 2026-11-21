@@ -25,7 +25,7 @@ assets, it also works with the network disconnected.
 npm test
 ```
 
-This runs `node --test tests/*.test.mjs`: **158 tests, 158 pass, 0 fail, 0
+This runs `node --test tests/*.test.mjs`: **165 tests, 165 pass, 0 fail, 0
 skipped**. The engine, crypto and QR suites contribute 42 tests; the UI,
 offline-hygiene, security and video-contract suite contributes 15 more; the
 Wave 1 revamp suite (map bounds, deadline audit, trace matrices, tamper probes,
@@ -35,8 +35,8 @@ optimality edges, segment hit-testing, AES-GCM corruption matrix and layout
 hygiene) contributes 16 more; and the Wave 3 suite (accessible-routing
 optimality vs brute force over every simple path, the relaxation ladder,
 unreachable diagnostics, dispatch unfulfilled audits, deterministic
-route-proof exports, keyboard contracts and invalid-input handling)
-contributes 65 more.
+route-proof exports, keyboard contracts, invalid-input handling and
+release-review regressions) contributes 72 more.
 
 ## Browser features
 
@@ -161,10 +161,15 @@ volunteer returns home), so a stop cannot be listed as served while failing
 its real constraints.
 
 `buildRouteProof(scenario, dispatch)` packages a dispatch run into a
-self-verifiable object: matching summary, metrics, every route leg,
-unfulfilled diagnostics and a `checks` block (recomputed distance, capacity
-violations, late-stop recount) plus a `fingerprint`.
-`routeProofJson` and `routeSummaryCsv` are the downloadable forms.
+self-verifiable object: matching summary, metrics, every route leg, one
+unified unfulfilled audit covering both unmatched requests
+(`unmatched-no-eligible-volunteer`) and route-rejected stops
+(`load-exceeds-capacity`, `travel-exceeds-time-budget`,
+`volunteer-missing-depot`), and a `checks` block (recomputed distance,
+capacity re-audited on unrounded loads, late-stop recount at full precision)
+plus a `fingerprint`.
+`routeProofJson` and `routeSummaryCsv` are the downloadable forms, and both
+emit the same complete unfulfilled audit.
 
 ## Encrypted shareable cards
 
@@ -224,8 +229,3 @@ a request when opening or decrypting a card.
 the baseline toggle, switches presets, steps both algorithm traces, toggles the
 surge, adjusts capacity, seals a card and opens the decrypted volunteer view.
 Every cue targets an element verified by the UI contract test.
-
-## AI-use disclosure
-
-An AI coding assistant helped implement the algorithms, tests, browser UI and
-documentation; the author reviewed every change and re-ran every number.

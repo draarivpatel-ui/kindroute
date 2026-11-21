@@ -415,8 +415,9 @@ export function createMapViz(canvas, callbacks = {}) {
   function stopRows(route) {
     return (route?.legs ?? []).map((leg, i) => {
       const request = requestById(leg.requestId);
-      const late = Number.isFinite(request?.deadline) && leg.arrivalMinutes > request.deadline;
-      const lateText = late ? ` (late +${Math.round(leg.arrivalMinutes - request.deadline)} min)` : '';
+      const arrival = leg.arrivalExact ?? leg.arrivalMinutes;
+      const late = Number.isFinite(request?.deadline) && arrival > request.deadline;
+      const lateText = late ? ` (late +${Math.round(arrival - request.deadline)} min)` : '';
       const skillText = request?.skillRequired ? ` (${request.skillRequired})` : '';
       return [`Stop ${i + 1}`, `${i + 1}. ${leg.requestId} at ${leg.arrivalMinutes} min${lateText}${skillText}`];
     });
@@ -431,7 +432,7 @@ export function createMapViz(canvas, callbacks = {}) {
       const stops = stopRows(route);
       const lateCount = (route.legs ?? []).filter((leg) => {
         const request = requestById(leg.requestId);
-        return Number.isFinite(request?.deadline) && leg.arrivalMinutes > request.deadline;
+        return Number.isFinite(request?.deadline) && (leg.arrivalExact ?? leg.arrivalMinutes) > request.deadline;
       }).length;
       return {
         title: `${volunteer.name ?? volunteer.id} - ${route.mode} route`,

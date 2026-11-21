@@ -66,7 +66,9 @@ function routeLegs(order, points, depot, speed) {
   let elapsed = 0;
   for (const idx of order) {
     elapsed += distance(previous, points[idx]) / speed;
-    legs.push({ requestId: points[idx].id, arrivalMinutes: roundNumber(elapsed) });
+    // arrivalMinutes is the display value rounded to 3 decimals; arrivalExact
+    // keeps full precision so deadline audits compare the true arrival time.
+    legs.push({ requestId: points[idx].id, arrivalMinutes: roundNumber(elapsed), arrivalExact: elapsed });
     previous = points[idx];
   }
   return legs;
@@ -399,7 +401,8 @@ export function median(valuesInput) {
  * actual route exceeds the request's own deadline. This is the number the UI
  * reports as "late arrivals" for each strategy.
  *
- * @param {object[]} routes routes with `requestIds` and `legs` (arrivalMinutes)
+ * @param {object[]} routes routes with `requestIds` and `legs` (arrivalMinutes,
+ *   and arrivalExact when produced by optimizeRoutes/baselineDispatch)
  * @param {object[]} requests all scenario requests (for deadline lookup)
  * @returns {{count:number, stops:object[]}} total late stops and their details
  */
@@ -410,13 +413,16 @@ export function countLateArrivals(routes, requests) {
     for (const leg of route.legs ?? []) {
       const deadline = deadlines.get(leg.requestId);
       if (!Number.isFinite(deadline)) continue;
-      if (leg.arrivalMinutes > deadline) {
+      // Audit on the unrounded arrival time: a stop 0.0002 min past its
+      // deadline is genuinely late even though its display value rounds to 1.
+      const arrival = leg.arrivalExact ?? leg.arrivalMinutes;
+      if (arrival > deadline) {
         stops.push({
           requestId: leg.requestId,
           volunteerId: route.volunteerId,
-          arrivalMinutes: leg.arrivalMinutes,
+          arrivalMinutes: arrival,
           deadline,
-          latenessMinutes: roundNumber(leg.arrivalMinutes - deadline),
+          latenessMinutes: arrival - deadline,
         });
       }
     }

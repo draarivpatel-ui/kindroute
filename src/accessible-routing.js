@@ -241,13 +241,15 @@ function dijkstra(graph, source, target, usable, weights) {
   let expanded = 0;
   while (heap.length) {
     const [cost, , u] = heapPop(heap);
-    if (cost > dist[u] + 1e-12) continue;
+    if (cost > dist[u]) continue;
     expanded += 1;
     if (u === target) break;
     for (const { to, edge } of graph.adjacency[u]) {
       if (!usable(edge)) continue;
       const nd = cost + edgeCost(edge, weights);
-      if (nd < dist[to] - 1e-12) {
+      // Strict comparison: any numerically shorter path wins, and only an
+      // exact === tie keeps the predecessor found first in insertion order.
+      if (nd < dist[to]) {
         dist[to] = nd;
         prevNode[to] = u;
         prevEdge[to] = edge.index;

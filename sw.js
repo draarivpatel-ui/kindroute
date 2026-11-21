@@ -3,7 +3,7 @@
  * Caches only relative assets under the app's own /kindroute/ subpath.
  * No external origins, no runtime network fallbacks, no tracking.
  */
-const CACHE = 'kindroute-v4';
+const CACHE = 'kindroute-v5';
 const SCOPE = new URL('./', self.registration.scope).pathname;
 const ASSETS = [
   './',
@@ -28,9 +28,15 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // CacheStorage is shared by the whole origin, so an upgrade may only evict
+  // keys inside this app's own kindroute- namespace; other same-origin apps'
+  // caches must survive.
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(
+        keys.filter((key) => key.startsWith('kindroute-') && key !== CACHE)
+          .map((key) => caches.delete(key)),
+      ))
       .then(() => self.clients.claim()),
   );
 });

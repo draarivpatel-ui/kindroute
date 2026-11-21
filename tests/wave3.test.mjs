@@ -8,6 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -777,7 +778,9 @@ test('CSV emits an unfulfilled section exactly when the dispatch has unfulfilled
   const csv = routeSummaryCsv(scenario, runDispatch(scenario));
   assert.ok(csv.includes('unfulfilled_request,volunteer_id,reasons'));
   assert.ok(csv.includes('far-1,v,travel-exceeds-time-budget'));
-  assert.ok(!routeSummaryCsv(SCENARIOS.oakwood, runDispatch(SCENARIOS.oakwood)).includes('unfulfilled_request,volunteer_id'));
+  // A preset with genuinely zero unfulfilled requests emits no section.
+  assert.equal(runDispatch(SCENARIOS.tutoring).metrics.unfulfilledRequests.optimized, 0);
+  assert.ok(!routeSummaryCsv(SCENARIOS.tutoring, runDispatch(SCENARIOS.tutoring)).includes('unfulfilled_request,volunteer_id'));
 });
 
 // ---------------------------------------------------------------------------
@@ -842,7 +845,7 @@ test('accessible routing lab DOM, controls and render path are wired', () => {
 });
 
 test('service worker caches the new modules under a bumped cache version', () => {
-  assert.match(SW, /const CACHE = 'kindroute-v4'/);
+  assert.match(SW, /const CACHE = 'kindroute-v5'/);
   assert.ok(SW.includes("'./src/accessible-routing.js'"));
   assert.ok(SW.includes("'./src/route-proof.js'"));
 });
@@ -865,7 +868,7 @@ test('package exports map exposes the two new modules', () => {
 // ---------------------------------------------------------------------------
 test('shipped files stay free of em/en dashes, smooth scroll and console calls', () => {
   const files = [
-    'index.html', 'styles.css', 'sw.js',
+    'index.html', 'styles.css', 'sw.js', 'README.md',
     'src/app.js', 'src/map-viz.js', 'src/index.js', 'src/routing.js',
     'src/dispatch.js', 'src/scenarios.js', 'src/hungarian.js',
     'src/crypto-card.js', 'src/qr-svg.js',
@@ -881,6 +884,7 @@ test('shipped files stay free of em/en dashes, smooth scroll and console calls',
   }
   assert.doesNotMatch(HTML, /\bAI\b/);
   assert.doesNotMatch(CSS, /\bAI\b/);
+  assert.doesNotMatch(read('README.md'), /\bAI\b/, 'README.md contains an AI mention');
 });
 
 test('access lab strings and export copy stay honest about being synthetic', () => {
@@ -888,4 +892,165 @@ test('access lab strings and export copy stay honest about being synthetic', () 
   assert.match(HTML, /grades at or under 8%/);
   assert.match(APP, /deterministic\)/);
   assert.doesNotMatch(APP, /innerHTML\s*=/);
+});
+
+// ---------------------------------------------------------------------------
+// Release-review regressions
+// ---------------------------------------------------------------------------
+
+test('service worker activate evicts only kindroute-namespaced caches', async () => {
+  const listeners = new Map();
+  const store = new Map([
+    ['kindroute-v3', true],
+    ['kindroute-v4', true],
+    ['kindroute-v5', true],
+    ['other-offline-app', true],
+  ]);
+  const deleted = [];
+  const sandbox = {
+    self: {
+      registration: { scope: 'https://example.test/kindroute/' },
+      location: { origin: 'https://example.test' },
+      addEventListener: (type, fn) => listeners.set(type, fn),
+      skipWaiting: () => {},
+      clients: { claim: async () => {} },
+    },
+    caches: {
+      keys: async () => [...store.keys()],
+      delete: async (key) => { deleted.push(key); return store.delete(key); },
+      open: async () => ({ addAll: async () => {} }),
+      match: async () => undefined,
+    },
+    URL,
+    Response,
+    fetch: async () => { throw new Error('offline'); },
+  };
+  vm.runInNewContext(SW, sandbox, { filename: 'sw.js' });
+  const activate = listeners.get('activate');
+  assert.ok(activate, 'sw.js must register an activate listener');
+  let pending = null;
+  activate({ waitUntil: (promise) => { pending = promise; } });
+  await pending;
+  assert.deepEqual(deleted.sort(), ['kindroute-v3', 'kindroute-v4'], 'only stale kindroute caches are evicted');
+  assert.equal(store.has('other-offline-app'), true, 'another app on this origin must survive activation');
+  assert.equal(store.has('kindroute-v5'), true, 'the current cache survives');
+});
+
+test('proof and CSV carry the unified unfulfilled audit on the Oakwood preset', () => {
+  const dispatch = runDispatch(SCENARIOS.oakwood);
+  assert.equal(dispatch.metrics.unfulfilledRequests.optimized, 1, 'one Oakwood request is unfulfilled');
+  const proof = buildRouteProof(SCENARIOS.oakwood, dispatch);
+  assert.equal(proof.checks.unfulfilledReported, dispatch.metrics.unfulfilledRequests.optimized);
+  assert.equal(proof.unfulfilled.length, dispatch.metrics.unfulfilledRequests.optimized);
+  const oak2 = proof.unfulfilled.find((entry) => entry.requestId === 'r-oak-2');
+  assert.ok(oak2, 'r-oak-2 must be audited, not only listed under unroutedRequestIds');
+  assert.equal(oak2.volunteerId, null);
+  assert.deepEqual(oak2.reasons, ['unmatched-no-eligible-volunteer']);
+  // The unified audit names exactly the unrouted set, no more, no less.
+  assert.deepEqual(
+    proof.unfulfilled.map((entry) => entry.requestId).sort(),
+    proof.matching.unroutedRequestIds.slice().sort(),
+  );
+  const csv = routeSummaryCsv(SCENARIOS.oakwood, dispatch);
+  assert.ok(csv.includes('unfulfilled_request,volunteer_id,reasons'), 'CSV gained the unfulfilled section');
+  assert.ok(csv.includes('r-oak-2,,unmatched-no-eligible-volunteer'), 'CSV row audits r-oak-2');
+});
+
+test('unified unfulfilled audit distinguishes unmatched from route-rejected', () => {
+  const scenario = {
+    id: 'mixed-unfulfilled',
+    name: 'Mixed fixture',
+    grid: { columns: 4, rows: 4, spacing: 2 },
+    volunteers: [{ id: 'v1', skills: [], mode: 'car', capacity: 4, home: { x: 0, y: 0 } }],
+    requests: [
+      { id: 'r-skill', description: 'needs a skill nobody has', location: { x: 1, y: 0 }, load: 1, urgency: 3, deadline: 200, windowMinutes: 200, readyAt: 0, skillRequired: 'medical-pickup' },
+      { id: 'r-loop', description: 'matched but fails the closed loop', location: { x: 31, y: 0 }, load: 1, urgency: 3, deadline: 5, windowMinutes: 200, readyAt: 0 },
+    ],
+  };
+  const dispatch = runDispatch(scenario);
+  const proof = buildRouteProof(scenario, dispatch);
+  assert.equal(dispatch.metrics.unfulfilledRequests.optimized, 2);
+  assert.equal(proof.unfulfilled.length, 2);
+  assert.equal(proof.checks.unfulfilledReported, 2);
+  const byId = new Map(proof.unfulfilled.map((entry) => [entry.requestId, entry]));
+  assert.deepEqual(byId.get('r-skill').reasons, ['unmatched-no-eligible-volunteer']);
+  assert.equal(byId.get('r-skill').volunteerId, null);
+  assert.deepEqual(byId.get('r-loop').reasons, ['travel-exceeds-time-budget']);
+  assert.equal(byId.get('r-loop').volunteerId, 'v1');
+  const csv = routeSummaryCsv(scenario, dispatch);
+  assert.ok(csv.includes('r-skill,,unmatched-no-eligible-volunteer'));
+  assert.ok(csv.includes('r-loop,v1,travel-exceeds-time-budget'));
+});
+
+test('capacity re-audit sums unrounded request loads at the exact limit', () => {
+  const scenario = {
+    id: 'capacity-boundary',
+    name: 'Boundary fixture',
+    grid: { columns: 3, rows: 3, spacing: 2 },
+    volunteers: [{ id: 'v1', skills: [], mode: 'walk', capacity: 2, home: { x: 0, y: 0 }, maxLoad: 1.2346, maxMinutes: 400 }],
+    requests: [
+      { id: 'r1', description: 'fits exactly', location: { x: 0.5, y: 0 }, load: 1.2346, urgency: 3, deadline: 200, windowMinutes: 200, readyAt: 0 },
+    ],
+  };
+  const dispatch = runDispatch(scenario);
+  assert.equal(dispatch.optimized.routes.length, 1, 'the solver accepts the feasible route');
+  const proof = buildRouteProof(scenario, dispatch);
+  assert.equal(proof.checks.allRoutesFeasible, true);
+  // Display rounding shows 1.235 but the true load is 1.2346 <= maxLoad.
+  assert.equal(proof.checks.capacityViolations, 0, 'a route at the exact limit is not a violation');
+});
+
+test('deadline audit flags a stop late at full precision in proof and CSV', () => {
+  const scenario = {
+    id: 'late-boundary',
+    name: 'Late fixture',
+    grid: { columns: 4, rows: 4, spacing: 2 },
+    volunteers: [{ id: 'v1', skills: [], mode: 'car', capacity: 4, home: { x: 0, y: 0 }, speed: 1, maxMinutes: 400 }],
+    requests: [
+      { id: 'edge', description: 'arrives 0.0002 min late', location: { x: 1.0004, y: 0 }, load: 1, urgency: 3, deadline: 1.0002, windowMinutes: 400, readyAt: 0 },
+      { id: 'far-ok', description: 'comfortably on time', location: { x: 1.1, y: 0 }, load: 1, urgency: 3, deadline: 10, windowMinutes: 400, readyAt: 0 },
+    ],
+  };
+  const dispatch = runDispatch(scenario);
+  const edge = dispatch.optimized.routes
+    .flatMap((route) => route.legs)
+    .find((leg) => leg.requestId === 'edge');
+  assert.equal(edge.arrivalMinutes, 1, 'the display value rounds to 1');
+  assert.ok(edge.arrivalExact > 1.0002, 'the exact arrival is genuinely late');
+  const proof = buildRouteProof(scenario, dispatch);
+  assert.equal(proof.checks.lateStops, 1, 'the proof recounts the late stop');
+  const stops = proof.metrics.lateArrivals.optimizedStops;
+  assert.equal(stops.length, 1);
+  assert.equal(stops[0].requestId, 'edge');
+  assert.ok(stops[0].arrivalMinutes > stops[0].deadline);
+  assert.ok(stops[0].latenessMinutes > 0);
+  const row = routeSummaryCsv(scenario, dispatch).split('\n')
+    .find((line) => line.split(',')[3] === 'edge');
+  assert.equal(row.split(',')[6], 'yes', 'the CSV flags the stop late');
+});
+
+test('parallel edges below the old tolerance take the strictly shorter one', () => {
+  const graph = {
+    nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 1, y: 0 }],
+    edges: [
+      { a: 'a', b: 'b', length: 1, name: 'long-edge' },
+      { a: 'a', b: 'b', length: 1 - 5e-13, name: 'short-edge' },
+    ],
+  };
+  const result = findAccessibleRoute(graph, 'a', 'b', { profile: 'fastest' });
+  assert.equal(result.status, 'optimal');
+  assert.equal(result.edges.length, 1);
+  assert.equal(result.edges[0].name, 'short-edge', 'a 5e-13 shorter edge still wins');
+});
+
+test('exact-cost parallel edges keep the earlier inserted edge', () => {
+  const graph = {
+    nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 1, y: 0 }],
+    edges: [
+      { a: 'a', b: 'b', length: 1, name: 'first-edge' },
+      { a: 'a', b: 'b', length: 1, name: 'second-edge' },
+    ],
+  };
+  const result = findAccessibleRoute(graph, 'a', 'b', { profile: 'fastest' });
+  assert.equal(result.edges[0].name, 'first-edge', 'an exact === tie retains insertion order');
 });

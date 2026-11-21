@@ -80,25 +80,46 @@ export function buildRouteProof(scenario, dispatch) {
     mode: route.mode,
     order: route.order.slice(),
     requestIds: route.requestIds.slice(),
-    legs: (route.legs ?? []).map((leg) => ({ requestId: leg.requestId, arrivalMinutes: leg.arrivalMinutes })),
+    legs: (route.legs ?? []).map((leg) => ({
+      requestId: leg.requestId,
+      arrivalMinutes: leg.arrivalMinutes,
+      arrivalExact: leg.arrivalExact ?? leg.arrivalMinutes,
+    })),
     distance: route.distance,
     load: route.load,
     travelMinutes: route.travelMinutes,
     feasible: route.feasible === true,
   }));
 
+  const servedIds = new Set(routes.flatMap((route) => route.requestIds));
+
+  // One unified audit list for every request that did not get served:
+  // route-rejected entries keep their diagnosed reasons, and requests the
+  // matcher never assigned get `unmatched-no-eligible-volunteer`.
   const unfulfilled = (optimized.unfulfilled ?? []).map((entry) => ({
     requestId: entry.request?.id ?? entry.requestId ?? null,
     volunteerId: entry.volunteerId ?? null,
     reasons: (entry.reasons ?? []).slice().sort(),
   }));
+  const auditedIds = new Set(unfulfilled.map((entry) => entry.requestId));
+  for (const request of requests) {
+    if (servedIds.has(request.id) || auditedIds.has(request.id)) continue;
+    unfulfilled.push({
+      requestId: request.id,
+      volunteerId: null,
+      reasons: ['unmatched-no-eligible-volunteer'],
+    });
+  }
 
-  const servedIds = new Set(routes.flatMap((route) => route.requestIds));
   const late = countLateArrivals(optimized.routes, requests);
   const recomputedDistance = roundNumber(routes.reduce((sum, route) => sum + route.distance, 0));
+  // Capacity is re-audited on the unrounded per-request loads, so a route at
+  // the exact limit is not reported as violating after display rounding.
+  const loadById = new Map(requests.map((r) => [r.id, r.load ?? 1]));
   const capacityViolations = routes.filter((route) => {
     const limit = maxLoadFor(volunteers.get(route.volunteerId), route);
-    return route.load > limit + 1e-9;
+    const rawLoad = route.requestIds.reduce((sum, id) => sum + (loadById.get(id) ?? 1), 0);
+    return rawLoad > limit + 1e-9;
   }).length;
 
   const checks = {
@@ -197,7 +218,10 @@ export function routeSummaryCsv(scenario, dispatch) {
   for (const route of dispatch.optimized.routes) {
     (route.legs ?? []).forEach((leg, i) => {
       const deadline = deadlines.get(leg.requestId);
-      const late = Number.isFinite(deadline) && leg.arrivalMinutes > deadline ? 'yes' : 'no';
+      // The late flag audits the unrounded arrival; eta_min stays the
+      // display-rounded value shown everywhere else in the app.
+      const arrival = leg.arrivalExact ?? leg.arrivalMinutes;
+      const late = Number.isFinite(deadline) && arrival > deadline ? 'yes' : 'no';
       lines.push([
         i + 1,
         route.volunteerId,
@@ -211,14 +235,15 @@ export function routeSummaryCsv(scenario, dispatch) {
     });
   }
 
-  const unfulfilled = dispatch.optimized.unfulfilled ?? [];
-  if (unfulfilled.length) {
+  // Same unified audit list as the proof JSON: unmatched requests and
+  // route-rejected requests both appear here with their own reason codes.
+  if (proof.unfulfilled.length) {
     lines.push('', 'unfulfilled_request,volunteer_id,reasons');
-    for (const entry of unfulfilled) {
+    for (const entry of proof.unfulfilled) {
       lines.push([
-        entry.request?.id ?? entry.requestId ?? '',
+        entry.requestId ?? '',
         entry.volunteerId ?? '',
-        (entry.reasons ?? []).slice().sort().join('|'),
+        (entry.reasons ?? []).join('|'),
       ].map(csvCell).join(','));
     }
   }
