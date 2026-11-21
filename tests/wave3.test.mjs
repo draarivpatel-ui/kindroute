@@ -22,7 +22,7 @@ import {
   stableStringify, sortKeysDeep, csvCell,
 } from '../src/route-proof.js';
 import { optimizeRoutes, twoOpt, distance } from '../src/routing.js';
-import { runDispatch } from '../src/dispatch.js';
+import { runDispatch, INFEASIBLE_COST } from '../src/dispatch.js';
 import { SCENARIOS, injectSurge, mulberry32 } from '../src/scenarios.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -750,7 +750,7 @@ test('CSV stop rows equal total routed legs with correct fields', () => {
   const dispatch = runDispatch(SCENARIOS.tutoring);
   const csv = routeSummaryCsv(SCENARIOS.tutoring, dispatch);
   const lines = csv.split('\n');
-  const head = lines.indexOf('stop,route_volunteer,mode,request_id,eta_min,deadline_min,late,load');
+  const head = lines.indexOf('stop,route_volunteer,mode,request_id,eta_min,eta_exact_min,deadline_min,late,load');
   assert.ok(head > 0);
   const rows = lines.slice(head + 1).filter((l) => l.length && !l.startsWith('#') && !l.startsWith('unfulfilled_request'));
   const legTotal = dispatch.optimized.routes.reduce((s, r) => s + r.legs.length, 0);
@@ -761,7 +761,7 @@ test('CSV stop rows equal total routed legs with correct fields', () => {
     assert.equal(cells[1], allLegs[i].vid);
     assert.equal(cells[2], allLegs[i].mode);
     assert.equal(cells[3], allLegs[i].leg.requestId);
-    assert.ok(['yes', 'no'].includes(cells[6]));
+    assert.ok(['yes', 'no'].includes(cells[7]));
   });
 });
 
@@ -1026,7 +1026,7 @@ test('deadline audit flags a stop late at full precision in proof and CSV', () =
   assert.ok(stops[0].latenessMinutes > 0);
   const row = routeSummaryCsv(scenario, dispatch).split('\n')
     .find((line) => line.split(',')[3] === 'edge');
-  assert.equal(row.split(',')[6], 'yes', 'the CSV flags the stop late');
+  assert.equal(row.split(',')[7], 'yes', 'the CSV flags the stop late');
 });
 
 test('parallel edges below the old tolerance take the strictly shorter one', () => {
@@ -1053,4 +1053,69 @@ test('exact-cost parallel edges keep the earlier inserted edge', () => {
   };
   const result = findAccessibleRoute(graph, 'a', 'b', { profile: 'fastest' });
   assert.equal(result.edges[0].name, 'first-edge', 'an exact === tie retains insertion order');
+});
+
+test('unmatched audit separates capacity contention from true ineligibility', () => {
+  // One walking volunteer with a single slot and two eligible stops at
+  // distances 1 and 2: the feasible cost row is [19, 20], the closer stop
+  // wins the slot and the loser was crowded out, not ineligible.
+  const scenario = {
+    id: 'capacity-contention',
+    name: 'Contention fixture',
+    grid: { columns: 4, rows: 4, spacing: 2 },
+    volunteers: [{ id: 'v1', skills: [], mode: 'walk', capacity: 1, home: { x: 0, y: 0 }, maxMinutes: 400 }],
+    requests: [
+      { id: 'r-near', description: 'closer eligible stop', location: { x: 1, y: 0 }, load: 1, urgency: 3, deadline: 200, windowMinutes: 200, readyAt: 0 },
+      { id: 'r-far', description: 'loses the only slot', location: { x: 2, y: 0 }, load: 1, urgency: 3, deadline: 200, windowMinutes: 200, readyAt: 0 },
+      { id: 'r-blocked', description: 'needs a skill nobody has', location: { x: 1, y: 0 }, load: 1, urgency: 3, deadline: 200, windowMinutes: 200, readyAt: 0, skillRequired: 'medical-pickup' },
+    ],
+  };
+  const dispatch = runDispatch(scenario);
+  const [row] = dispatch.matched.matrix;
+  assert.equal(dispatch.matched.matrix.length, 1, 'one volunteer slot, one cost row');
+  assert.equal(row[0], 19);
+  assert.equal(row[1], 20);
+  assert.ok(row[2] >= INFEASIBLE_COST, 'the skilled request is genuinely infeasible');
+  assert.equal(dispatch.metrics.unfulfilledRequests.optimized, 2);
+  const proof = buildRouteProof(scenario, dispatch);
+  assert.equal(proof.checks.servedStops, 1, 'only the nearer stop is served');
+  const byId = new Map(proof.unfulfilled.map((entry) => [entry.requestId, entry]));
+  assert.deepEqual(byId.get('r-far').reasons, ['unmatched-capacity-exhausted']);
+  assert.deepEqual(byId.get('r-blocked').reasons, ['unmatched-no-eligible-volunteer']);
+  const csv = routeSummaryCsv(scenario, dispatch);
+  assert.ok(csv.includes('r-far,,unmatched-capacity-exhausted'));
+  assert.ok(csv.includes('r-blocked,,unmatched-no-eligible-volunteer'));
+});
+
+test('CSV exact-ETA column reproduces the late flag without the JSON', () => {
+  const scenario = {
+    id: 'csv-exact-eta',
+    name: 'Exact ETA fixture',
+    grid: { columns: 4, rows: 4, spacing: 2 },
+    volunteers: [{ id: 'v1', skills: [], mode: 'car', capacity: 4, home: { x: 0, y: 0 }, speed: 1, maxMinutes: 400 }],
+    requests: [
+      { id: 'edge', description: 'arrives 0.0002 min late', location: { x: 1.0004, y: 0 }, load: 1, urgency: 3, deadline: 1.0002, windowMinutes: 400, readyAt: 0 },
+      { id: 'far-ok', description: 'comfortably on time', location: { x: 1.1, y: 0 }, load: 1, urgency: 3, deadline: 10, windowMinutes: 400, readyAt: 0 },
+    ],
+  };
+  const dispatch = runDispatch(scenario);
+  const leg = dispatch.optimized.routes
+    .flatMap((route) => route.legs)
+    .find((l) => l.requestId === 'edge');
+  const lines = routeSummaryCsv(scenario, dispatch).split('\n');
+  const head = lines.indexOf('stop,route_volunteer,mode,request_id,eta_min,eta_exact_min,deadline_min,late,load');
+  assert.ok(head > 0, 'the stop table carries the exact-ETA audit column');
+  // Every stop row must satisfy late = (eta_exact_min > deadline_min) read
+  // straight from the CSV, exactly the check a table auditor would rerun.
+  for (const line of lines.slice(head + 1)) {
+    if (!line || line.startsWith('#') || line.startsWith('unfulfilled_request')) break;
+    const cells = line.split(',');
+    assert.equal(Number(cells[5]) > Number(cells[6]), cells[7] === 'yes', `${cells[3]}: late flag vs exact ETA`);
+  }
+  const edge = lines.slice(head + 1).find((line) => line.split(',')[3] === 'edge').split(',');
+  assert.equal(Number(edge[4]), leg.arrivalMinutes, 'eta_min keeps the display value');
+  assert.equal(Number(edge[5]), leg.arrivalExact, 'eta_exact_min is the unrounded arrival');
+  assert.equal(Number(edge[5]), 1.0004);
+  assert.equal(Number(edge[6]), 1.0002);
+  assert.ok(Number(edge[4]) <= Number(edge[6]), 'the display ETA alone would miss the lateness');
 });

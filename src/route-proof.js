@@ -17,6 +17,7 @@
  */
 
 import { TRAVEL_MODES, countLateArrivals } from './routing.js';
+import { INFEASIBLE_COST } from './dispatch.js';
 
 /** Recursively rebuild a value with object keys sorted at every depth. */
 export function sortKeysDeep(value) {
@@ -95,19 +96,31 @@ export function buildRouteProof(scenario, dispatch) {
 
   // One unified audit list for every request that did not get served:
   // route-rejected entries keep their diagnosed reasons, and requests the
-  // matcher never assigned get `unmatched-no-eligible-volunteer`.
+  // matcher never assigned are split by why. A column with no finite cost
+  // in the matching matrix means no volunteer slot could serve the request;
+  // at least one feasible slot means competing assignments consumed the
+  // capacity. When no matrix was kept the reason stays neutral.
   const unfulfilled = (optimized.unfulfilled ?? []).map((entry) => ({
     requestId: entry.request?.id ?? entry.requestId ?? null,
     volunteerId: entry.volunteerId ?? null,
     reasons: (entry.reasons ?? []).slice().sort(),
   }));
   const auditedIds = new Set(unfulfilled.map((entry) => entry.requestId));
+  const costMatrix = dispatch.matched?.matrix;
+  const columnOf = new Map(requests.map((request, index) => [request.id, index]));
+  const hadFeasibleSlot = (request) => {
+    const column = columnOf.get(request.id);
+    if (!Array.isArray(costMatrix) || column === undefined) return null;
+    return costMatrix.some((row) => Array.isArray(row) && row[column] < INFEASIBLE_COST);
+  };
   for (const request of requests) {
     if (servedIds.has(request.id) || auditedIds.has(request.id)) continue;
+    const eligible = hadFeasibleSlot(request);
     unfulfilled.push({
       requestId: request.id,
       volunteerId: null,
-      reasons: ['unmatched-no-eligible-volunteer'],
+      reasons: [eligible === null ? 'unmatched'
+        : eligible ? 'unmatched-capacity-exhausted' : 'unmatched-no-eligible-volunteer'],
     });
   }
 
@@ -212,13 +225,14 @@ export function routeSummaryCsv(scenario, dispatch) {
     `unfulfilled_requests,${metrics.unfulfilledRequests.optimized},${metrics.unfulfilledRequests.baseline}`,
     `route_count,${metrics.routeCount.optimized},${metrics.routeCount.baseline}`,
     '',
-    'stop,route_volunteer,mode,request_id,eta_min,deadline_min,late,load',
+    'stop,route_volunteer,mode,request_id,eta_min,eta_exact_min,deadline_min,late,load',
   ];
 
   for (const route of dispatch.optimized.routes) {
     (route.legs ?? []).forEach((leg, i) => {
       const deadline = deadlines.get(leg.requestId);
-      // The late flag audits the unrounded arrival; eta_min stays the
+      // The late flag audits the unrounded arrival, exported as
+      // eta_exact_min so the CSV alone can reproduce it; eta_min stays the
       // display-rounded value shown everywhere else in the app.
       const arrival = leg.arrivalExact ?? leg.arrivalMinutes;
       const late = Number.isFinite(deadline) && arrival > deadline ? 'yes' : 'no';
@@ -228,6 +242,7 @@ export function routeSummaryCsv(scenario, dispatch) {
         route.mode,
         leg.requestId,
         leg.arrivalMinutes,
+        leg.arrivalExact ?? leg.arrivalMinutes,
         Number.isFinite(deadline) ? deadline : '',
         late,
         loads.get(leg.requestId) ?? '',

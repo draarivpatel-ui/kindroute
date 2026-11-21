@@ -15,7 +15,7 @@ import { optimizeRoutes, baselineDispatch, compareDispatch, distance, TRAVEL_MOD
 const URGENCY_WEIGHT = 6;
 const SKILL_MISMATCH_PENALTY = 40;
 const WINDOW_PENALTY = 25;
-const INFEASIBLE_COST = 1e6;
+export const INFEASIBLE_COST = 1e6;
 
 function modeConfig(volunteer) {
   const base = TRAVEL_MODES[volunteer.mode] ?? TRAVEL_MODES.walk;

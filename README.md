@@ -25,7 +25,7 @@ assets, it also works with the network disconnected.
 npm test
 ```
 
-This runs `node --test tests/*.test.mjs`: **165 tests, 165 pass, 0 fail, 0
+This runs `node --test tests/*.test.mjs`: **167 tests, 167 pass, 0 fail, 0
 skipped**. The engine, crypto and QR suites contribute 42 tests; the UI,
 offline-hygiene, security and video-contract suite contributes 15 more; the
 Wave 1 revamp suite (map bounds, deadline audit, trace matrices, tamper probes,
@@ -36,7 +36,7 @@ hygiene) contributes 16 more; and the Wave 3 suite (accessible-routing
 optimality vs brute force over every simple path, the relaxation ladder,
 unreachable diagnostics, dispatch unfulfilled audits, deterministic
 route-proof exports, keyboard contracts, invalid-input handling and
-release-review regressions) contributes 72 more.
+release-review regressions) contributes 74 more.
 
 ## Browser features
 
@@ -78,8 +78,10 @@ release-review regressions) contributes 72 more.
   route proof (keys sorted at every depth, a 64-bit FNV-1a fingerprint and
   self-checks that recompute totals, capacity and the deadline audit), and
   Summary CSV downloads a flat metrics-plus-stops table with RFC 4180
-  escaping and spreadsheet-formula guards. Same dispatch, same bytes, same
-  fingerprint shown inline before download.
+  escaping and spreadsheet-formula guards. Each stop row pairs the display
+  ETA with the exact audited ETA, so a late flag can be recomputed straight
+  from the CSV. Same dispatch, same bytes, same fingerprint shown inline
+  before download.
 - **Keyboard operation:** the canvas map is focusable and pans with the
   arrow keys, zooms with plus/minus and resets with 0, and the tab bar
   follows the ARIA roving-tabindex pattern (Left/Right to move, Home/End to
@@ -163,7 +165,9 @@ its real constraints.
 `buildRouteProof(scenario, dispatch)` packages a dispatch run into a
 self-verifiable object: matching summary, metrics, every route leg, one
 unified unfulfilled audit covering both unmatched requests
-(`unmatched-no-eligible-volunteer`) and route-rejected stops
+(`unmatched-no-eligible-volunteer` when no volunteer slot could serve them,
+`unmatched-capacity-exhausted` when eligible slots went to competing
+assignments) and route-rejected stops
 (`load-exceeds-capacity`, `travel-exceeds-time-budget`,
 `volunteer-missing-depot`), and a `checks` block (recomputed distance,
 capacity re-audited on unrounded loads, late-stop recount at full precision)
